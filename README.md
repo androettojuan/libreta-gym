@@ -13,7 +13,16 @@ Queda con su ícono, se abre en pantalla completa y funciona sin internet despu�
 
 ## Dónde se guardan los datos
 
-En el celular (almacenamiento del navegador). No se sincronizan entre dispositivos. Desde **Copia de seguridad → Guardar copia** se descarga un `.json` con el plan y todos los pesos; con **Restaurar copia** se vuelve a cargar (por ejemplo, en un celular nuevo).
+- **Con cuenta (Entrar con Google):** en Firebase (proyecto `libreta-gym`), en Firestore bajo `users/<uid>/data/plan` y `users/<uid>/logs/<ejercicio>`. Cada persona ve solo lo suyo (ver `firestore.rules`). Funciona sin señal y sincroniza al volver la conexión.
+- **Sin cuenta:** en el celular (almacenamiento del navegador), sin sincronizar. Desde **Copia de seguridad → Guardar copia** se descarga un `.json` con el plan y todos los pesos; con **Restaurar copia** se vuelve a cargar.
+
+Al entrar con una cuenta nueva en un celular que ya tenía pesos anotados sin cuenta, la app ofrece subirlos.
+
+### Configuración de Firebase
+
+1. Authentication → Método de acceso → **Google** habilitado.
+2. Authentication → Configuración → Dominios autorizados → agregar `androettojuan.github.io`.
+3. Firestore Database → crear base de datos → pegar en **Reglas** el contenido de `firestore.rules` y publicar.
 
 ## Cargar un plan nuevo
 

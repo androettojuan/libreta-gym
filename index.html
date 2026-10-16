@@ -154,6 +154,9 @@ button { cursor: pointer; }
 <div class="wrap" id="app"><p class="loading">Cargando tu plan…</p></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 (() => {
   "use strict";
@@ -184,10 +187,21 @@ button { cursor: pointer; }
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
   }
 
-  // ---------- storage: artifact db, or this device as fallback ----------
-  let store = null;
+  // ---------- storage: Firebase account, artifact db, or this device only ----------
+  // The web config is public by design; access is enforced by firestore.rules.
+  const FB_CONFIG = {
+    apiKey: "AIzaSyD7ntJ9Soxw9wV4bqRiAIdMzlIkoY9BYgs",
+    authDomain: "libreta-gym.firebaseapp.com",
+    projectId: "libreta-gym",
+    storageBucket: "libreta-gym.firebasestorage.app",
+    messagingSenderId: "61107771415",
+    appId: "1:61107771415:web:37f06c5b067c1fe8686452",
+  };
+  let store = null, auth = null;
   const chains = {};
   const queue = (key, fn) => (chains[key] = (chains[key] || Promise.resolve()).then(fn, fn));
+  const lsRead = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+  const lsWrite = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 
   async function initStore() {
     let db = null;
@@ -201,23 +215,93 @@ button { cursor: pointer; }
       const fail = e => toast("No se pudo leer tus datos (" + (e && e.code || "error") + "). Recargá la página.");
       db.doc("app/plan").onSnapshot(s => { S.plan = s.exists ? s.data() : null; S.ready = true; render(); }, fail);
       db.collection("log").onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.logs = m; render(); }, fail);
+    } else if (lsRead("gym.mode") === "local") {
+      initLocal();
+    } else if (window.firebase) {
+      initFirebase();
     } else {
-      S.local = true;
-      const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
-      const write = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
-      S.plan = read("gym.plan"); S.logs = read("gym.logs") || {};
-      try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
-      if (!S.plan) {
-        // First visit: start with the plan published next to the app.
-        try { const r = await fetch("plan.json", { cache: "no-cache" }); if (r.ok) { S.plan = await r.json(); write("gym.plan", S.plan); } } catch (e) {}
-      }
+      S.auth = "nolib"; S.ready = true; render();
+    }
+  }
+
+  async function initLocal() {
+    S.local = true; S.auth = null;
+    S.plan = lsRead("gym.plan"); S.logs = lsRead("gym.logs") || {};
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+    if (!S.plan) {
+      // First visit: start with the plan published next to the app.
+      try { const r = await fetch("plan.json", { cache: "no-cache" }); if (r.ok) { S.plan = await r.json(); lsWrite("gym.plan", S.plan); } } catch (e) {}
+    }
+    store = {
+      replaceAll: async (p, l) => { S.plan = p; S.logs = l; lsWrite("gym.plan", p); lsWrite("gym.logs", l); render(); },
+      savePlan: async p => { S.plan = p; lsWrite("gym.plan", p); render(); },
+      saveLog: async (id, d) => { S.logs = { ...S.logs, [id]: d }; lsWrite("gym.logs", S.logs); render(); },
+      deleteLog: async id => { const m = { ...S.logs }; delete m[id]; S.logs = m; lsWrite("gym.logs", m); render(); },
+    };
+    S.ready = true; render();
+  }
+
+  // Firestore applies writes locally at once and syncs when there is signal,
+  // so the page never waits for the server; failures surface as a toast.
+  const fire = p => { p.catch(e => toast(saveError(e))); return Promise.resolve(); };
+
+  function initFirebase() {
+    firebase.initializeApp(FB_CONFIG);
+    auth = firebase.auth();
+    const fs = firebase.firestore();
+    fs.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+    auth.getRedirectResult().catch(e => toast(authError(e)));
+    let unsubs = [];
+    auth.onAuthStateChanged(user => {
+      unsubs.forEach(u => u()); unsubs = [];
+      Object.assign(S, { user, plan: null, logs: {}, open: null, editing: null, drafts: {}, preview: null, migrate: null });
+      if (!user) { S.auth = "out"; S.ready = true; render(); return; }
+      S.auth = "in"; S.ready = false; render();
+      const base = fs.collection("users").doc(user.uid);
+      const planRef = base.collection("data").doc("plan"), logsRef = base.collection("logs");
       store = {
-        replaceAll: async (p, l) => { S.plan = p; S.logs = l; write("gym.plan", p); write("gym.logs", l); render(); },
-        savePlan: async p => { S.plan = p; write("gym.plan", p); render(); },
-        saveLog: async (id, d) => { S.logs = { ...S.logs, [id]: d }; write("gym.logs", S.logs); render(); },
-        deleteLog: async id => { const m = { ...S.logs }; delete m[id]; S.logs = m; write("gym.logs", m); render(); },
+        savePlan: p => fire(planRef.set(p)),
+        saveLog: (id, d) => fire(logsRef.doc(id).set(d)),
+        deleteLog: id => fire(logsRef.doc(id).delete()),
+        replaceAll: (p, l) => {
+          const b = fs.batch(); b.set(planRef, p);
+          Object.entries(l || {}).slice(0, 450).forEach(([id, d]) => b.set(logsRef.doc(id), d));
+          return fire(b.commit());
+        },
       };
-      S.ready = true; render();
+      const fail = e => toast("No se pudieron leer tus datos (" + (e && e.code || "error") + ").");
+      unsubs.push(planRef.onSnapshot({ includeMetadataChanges: true }, s => {
+        S.plan = s.exists ? s.data() : null;
+        if (!s.exists && s.metadata.fromCache) return; // wait for the server before showing an empty account
+        offerMigration(user.uid);
+        S.ready = true; render();
+      }, fail));
+      unsubs.push(logsRef.onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.logs = m; render(); }, fail));
+    });
+  }
+
+  // A new account on a phone that already has notes from before the login: offer to bring them over.
+  function offerMigration(uid) {
+    if (S.plan || lsRead("gym.migrated." + uid)) return;
+    const plan = lsRead("gym.plan"), logs = lsRead("gym.logs") || {};
+    const count = Object.keys(logs).length;
+    if (plan && count) S.migrate = { plan, logs, count };
+  }
+
+  function authError(e) {
+    const c = e && e.code || "";
+    if (c === "auth/unauthorized-domain") return "Falta autorizar este sitio en Firebase (Authentication → Dominios autorizados).";
+    if (c === "auth/operation-not-allowed") return "Falta activar el ingreso con Google en Firebase.";
+    if (c === "auth/network-request-failed") return "Sin conexión. Probá de nuevo cuando tengas señal.";
+    return "No se pudo entrar (" + (c || "error") + ").";
+  }
+  async function signIn() {
+    const p = new firebase.auth.GoogleAuthProvider();
+    p.setCustomParameters({ prompt: "select_account" });
+    try { await auth.signInWithPopup(p); }
+    catch (e) {
+      if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") auth.signInWithRedirect(p).catch(er => toast(authError(er)));
+      else if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") toast(authError(e));
     }
   }
 
@@ -336,7 +420,44 @@ button { cursor: pointer; }
         <h2>Cargá tu plan</h2>
         <ol><li>Elegí el PDF que te pasó el profe.</li><li>Revisá que los ejercicios estén bien.</li><li>Guardalo. Queda listo para la próxima vez.</li></ol>
         ${viewImport()}
-      </section>${viewBackup()}`;
+        ${S.preview || S.importing ? "" : `<button class="btn ghost" data-act="sample-plan">Usar el plan de ejemplo</button>`}
+      </section>${viewBackup()}${viewAccount()}`;
+  }
+  const brandTop = sub => `<header class="top"><div class="brand"><h1>Libreta de Gym</h1><p>${sub}</p></div></header>`;
+  function viewLogin() {
+    return `${brandTop("Tu plan y tus pesos, siempre a mano")}
+      <section class="welcome">
+        <h2>Entrá con tu cuenta</h2>
+        <p class="obs">Tus pesos quedan guardados en tu cuenta de Google y los ves desde cualquier celular. Cada persona que entra tiene su propio plan y sus propios pesos.</p>
+        <div class="links"><button class="btn primary" data-act="sign-in">Entrar con Google</button></div>
+        <button class="btn ghost" data-act="go-local">Seguir sin cuenta</button>
+        <p class="obs">Sin cuenta, los datos quedan solo en este celular.</p>
+      </section>`;
+  }
+  function viewNoLib() {
+    return `${brandTop("Sin conexión")}
+      <section class="welcome"><h2>Necesitás internet</h2>
+        <p class="obs">La primera vez la app necesita conexión para poder entrar con tu cuenta.</p>
+        <div class="links"><button class="btn primary" data-act="reload">Reintentar</button><button class="btn ghost" data-act="go-local">Seguir sin cuenta</button></div>
+      </section>`;
+  }
+  function viewMigrate() {
+    const m = S.migrate;
+    return `${brandTop(esc(S.user.displayName || S.user.email || ""))}
+      <section class="welcome"><h2>Datos en este celular</h2>
+        <p class="obs">Encontré un plan y pesos anotados de ${m.count} ${m.count === 1 ? "ejercicio" : "ejercicios"} guardados en este celular desde antes de entrar con tu cuenta.</p>
+        <div class="links"><button class="btn primary" data-act="migrate-yes">Subirlos a mi cuenta</button><button class="btn ghost" data-act="migrate-no">Empezar de cero</button></div>
+        <p class="obs">Si estos datos son de otra persona, elegí "Empezar de cero".</p>
+      </section>`;
+  }
+  function viewAccount() {
+    if (S.auth === "in") return `<section class="plan-box"><h2>Cuenta</h2>
+        <p>${esc(S.user.displayName || "")}${S.user.email ? ` · ${esc(S.user.email)}` : ""}</p>
+        <div class="links"><button class="btn ghost" data-act="sign-out">Salir</button></div></section>`;
+    if (S.local && window.firebase) return `<section class="plan-box"><h2>Cuenta</h2>
+        <p>Estás usando la app sin cuenta. Entrá con Google para guardar tus pesos en la nube y verlos desde cualquier celular.</p>
+        <div class="links"><button class="btn" data-act="go-account">Entrar con Google</button></div></section>`;
+    return "";
   }
   const localBanner = () => "";
   const viewBackup = () => !S.local ? "" : `<section class="plan-box"><h2>Copia de seguridad</h2>
@@ -437,6 +558,9 @@ button { cursor: pointer; }
 
   function view() {
     if (!S.ready) return `<p class="loading">Cargando tu plan…</p>`;
+    if (S.auth === "nolib") return viewNoLib();
+    if (S.auth === "out") return viewLogin();
+    if (S.migrate) return viewMigrate();
     if (!S.plan || !S.plan.days || !S.plan.days.length) return viewWelcome();
     const p = S.plan, di = Math.min(S.day, p.days.length - 1), day = p.days[di];
     const d = new Date();
@@ -452,7 +576,7 @@ button { cursor: pointer; }
         <p>${p.days.length} entrenamientos · ${p.days.reduce((n, x) => n + x.exercises.length, 0)} ejercicios${p.loadedAt ? ` · cargado el ${fmtDate(p.loadedAt)}` : ""}. Cuando el profe te dé uno nuevo, cargalo acá.</p>
         ${viewImport()}
       </section>
-      ${viewBackup()}`;
+      ${viewBackup()}${viewAccount()}`;
   }
 
   function render() {
@@ -533,6 +657,14 @@ button { cursor: pointer; }
     else if (act === "export") exportBackup();
     else if (act === "restore") { const r = S.restore; S.restore = null; store.replaceAll(r.plan, r.logs || {}).then(() => toast("Copia restaurada")); }
     else if (act === "cancel-restore") { S.restore = null; render(); }
+    else if (act === "sign-in") signIn();
+    else if (act === "sign-out") auth.signOut();
+    else if (act === "go-local") { lsWrite("gym.mode", "local"); location.reload(); }
+    else if (act === "go-account") { lsWrite("gym.mode", null); location.reload(); }
+    else if (act === "reload") location.reload();
+    else if (act === "migrate-yes") { const m = S.migrate; S.migrate = null; lsWrite("gym.migrated." + S.user.uid, true); store.replaceAll(m.plan, m.logs); toast("Datos subidos a tu cuenta"); render(); }
+    else if (act === "migrate-no") { S.migrate = null; lsWrite("gym.migrated." + S.user.uid, true); render(); }
+    else if (act === "sample-plan") fetch("plan.json", { cache: "no-cache" }).then(r => r.json()).then(p => { S.preview = p; render(); }).catch(() => toast("No se pudo cargar el plan de ejemplo."));
   });
   document.addEventListener("input", e => {
     const t = e.target; if (!t.dataset || !t.dataset.field) return;

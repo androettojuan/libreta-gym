@@ -1,7 +1,8 @@
 // Keeps the app usable without signal at the gym.
 // App files: network first (so updates arrive), cache as fallback.
-// Fonts and the PDF reader: cache first.
-const CACHE = "libreta-gym-v2";
+// Fonts, the PDF reader and the Firebase libraries: cache first.
+// Firebase sign-in and database traffic is never touched here.
+const CACHE = "libreta-gym-v3";
 const SHELL = ["./", "index.html", "plan.json", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -21,7 +22,8 @@ self.addEventListener("fetch", e => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
-  const cdn = /fonts\.(googleapis|gstatic)\.com$|cdnjs\.cloudflare\.com$/.test(url.hostname);
+  const cdn = /fonts\.(googleapis|gstatic)\.com$|cdnjs\.cloudflare\.com$/.test(url.hostname)
+    || (url.hostname === "www.gstatic.com" && url.pathname.startsWith("/firebasejs/"));
   if (!sameOrigin && !cdn) return;
 
   if (sameOrigin) {
