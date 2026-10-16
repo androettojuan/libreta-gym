@@ -145,7 +145,17 @@ button { cursor: pointer; }
 .welcome.warn h2 { color: var(--accent); }
 .welcome.warn p, .welcome.warn ul { margin: 0; }
 .welcome.warn ul { padding-left: 20px; }
-.loading { padding-block: 60px; text-align: center; color: var(--muted); }
+.loading { min-height: 70vh; display: flex; align-items: center; justify-content: center; }
+.loading svg { width: 132px; height: auto; overflow: visible; }
+.loading .bar { fill: var(--muted); }
+.loading .plate { fill: var(--accent); }
+.loading .shadow { fill: var(--line); transform-box: fill-box; transform-origin: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .loading .lift { animation: lift 1.1s cubic-bezier(.45,0,.55,1) infinite; }
+  .loading .shadow { animation: shadow 1.1s cubic-bezier(.45,0,.55,1) infinite; }
+  @keyframes lift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-34px); } }
+  @keyframes shadow { 0%, 100% { transform: scaleX(1); opacity: .9; } 50% { transform: scaleX(.6); opacity: .45; } }
+}
 
 /* Bottom tab bar */
 .wrap:has(.tabbar) { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
@@ -179,7 +189,7 @@ button { cursor: pointer; }
 </style>
 </head>
 <body>
-<div class="wrap" id="app"><p class="loading">Cargando tu plan…</p></div>
+<div class="wrap" id="app"><div class="loading" role="status"><svg viewBox="0 0 132 84" aria-hidden="true"><ellipse class="shadow" cx="66" cy="78" rx="46" ry="4"/><g class="lift"><rect class="bar" x="4" y="39" width="124" height="6" rx="3"/><rect class="plate" x="14" y="22" width="10" height="40" rx="3"/><rect class="plate" x="26" y="28" width="7" height="28" rx="2"/><rect class="plate" x="108" y="22" width="10" height="40" rx="3"/><rect class="plate" x="99" y="28" width="7" height="28" rx="2"/></g></svg><span class="sr">Cargando</span></div></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -199,6 +209,7 @@ button { cursor: pointer; }
   try { if (localStorage.getItem("gym.tab") === "progress") S.tab = "progress"; } catch (e) {}
 
   const $ = (s, r = document) => r.querySelector(s);
+  const LOADER = $("#app").innerHTML; // the animated barbell already in the page
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const clone = o => JSON.parse(JSON.stringify(o));
   const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -713,7 +724,7 @@ button { cursor: pointer; }
   }
 
   function view() {
-    if (!S.ready) return `<p class="loading">Cargando tu plan…</p>`;
+    if (!S.ready) return LOADER;
     if (S.auth === "nolib") return viewNoLib();
     if (S.auth === "in" && S.loadError) return viewLoadError();
     if (S.auth === "out") return viewLogin();
