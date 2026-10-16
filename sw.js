@@ -1,7 +1,7 @@
 // Keeps the app usable without signal at the gym.
 // App files: network first (so updates arrive), cache as fallback.
 // Fonts and the PDF reader: cache first.
-const CACHE = "libreta-gym-v1";
+const CACHE = "libreta-gym-v2";
 const SHELL = ["./", "index.html", "plan.json", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
