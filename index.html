@@ -228,10 +228,6 @@ button { cursor: pointer; }
     S.local = true; S.auth = null;
     S.plan = lsRead("gym.plan"); S.logs = lsRead("gym.logs") || {};
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
-    if (!S.plan) {
-      // First visit: start with the plan published next to the app.
-      try { const r = await fetch("plan.json", { cache: "no-cache" }); if (r.ok) { S.plan = await r.json(); lsWrite("gym.plan", S.plan); } } catch (e) {}
-    }
     store = {
       replaceAll: async (p, l) => { S.plan = p; S.logs = l; lsWrite("gym.plan", p); lsWrite("gym.logs", l); render(); },
       savePlan: async p => { S.plan = p; lsWrite("gym.plan", p); render(); },
@@ -424,7 +420,6 @@ button { cursor: pointer; }
         <h2>Cargá tu plan</h2>
         <ol><li>Elegí el PDF que te pasó el profe.</li><li>Revisá que los ejercicios estén bien.</li><li>Guardalo. Queda listo para la próxima vez.</li></ol>
         ${viewImport()}
-        ${S.preview || S.importing ? "" : `<button class="btn ghost" data-act="sample-plan">Usar el plan de ejemplo</button>`}
       </section>${viewBackup()}${viewAccount()}`;
   }
   const brandTop = sub => `<header class="top"><div class="brand"><h1>Libreta de Gym</h1><p>${sub}</p></div></header>`;
@@ -679,9 +674,7 @@ button { cursor: pointer; }
     else if (act === "go-account") { lsWrite("gym.mode", null); location.reload(); }
     else if (act === "reload") location.reload();
     else if (act === "migrate-yes") { const m = S.migrate; S.migrate = null; lsWrite("gym.migrated." + S.user.uid, true); store.replaceAll(m.plan, m.logs); toast("Datos subidos a tu cuenta"); render(); }
-    else if (act === "migrate-no") { S.migrate = null; lsWrite("gym.migrated." + S.user.uid, true); render(); }
-    else if (act === "sample-plan") fetch("plan.json", { cache: "no-cache" }).then(r => r.json()).then(p => { S.preview = p; render(); }).catch(() => toast("No se pudo cargar el plan de ejemplo."));
-  });
+    else if (act === "migrate-no") { S.migrate = null; lsWrite("gym.migrated." + S.user.uid, true); render(); }  });
   document.addEventListener("input", e => {
     const t = e.target; if (!t.dataset || !t.dataset.field) return;
     const ex = findEx(t.dataset.id); if (!ex) return;

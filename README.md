@@ -28,14 +28,14 @@ Al entrar con una cuenta nueva en un celular que ya tenía pesos anotados sin cu
 
 Desde la app: **Cargar un plan nuevo (PDF)**. Lee la planilla del gimnasio con pdf.js (columnas Ejercicio / Video / Series / Reps / Descanso / Observaciones, bloques "Entrenamiento N") y muestra una vista previa antes de guardar. Los pesos anotados se conservan en los ejercicios con el mismo nombre.
 
-Para cambiar el plan con el que arranca la app la primera vez, reemplazá `plan.json`.
+Cada persona nueva arranca sin plan y carga el suyo desde el PDF.
 
 ## Archivos
 
 | Archivo | Qué es |
 |---|---|
 | `index.html` | La app completa (HTML + CSS + JS, sin build). |
-| `plan.json` | Plan inicial. |
+| `firestore.rules` | Reglas de seguridad de Firestore (cada usuario accede solo a lo suyo). |
 | `manifest.webmanifest`, `icon*.png`, `icon.svg` | Datos e íconos para instalarla como app. |
 | `sw.js` | Service worker: deja la app disponible sin conexión. |
 

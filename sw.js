@@ -2,8 +2,8 @@
 // App files: network first (so updates arrive), cache as fallback.
 // Fonts, the PDF reader and the Firebase libraries: cache first.
 // Firebase sign-in and database traffic is never touched here.
-const CACHE = "libreta-gym-v4";
-const SHELL = ["./", "index.html", "plan.json", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
+const CACHE = "libreta-gym-v5";
+const SHELL = ["./", "index.html","manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
