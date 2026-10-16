@@ -269,10 +269,14 @@ button { cursor: pointer; }
           return fire(b.commit());
         },
       };
-      const fail = e => toast("No se pudieron leer tus datos (" + (e && e.code || "error") + ").");
+      const fail = e => { S.loadError = (e && e.code) || "error"; S.ready = true; render(); };
+      S.loadError = null;
+      // Without signal on a new phone the server never answers: after a while, show what is cached.
+      const slow = setTimeout(() => { if (!S.ready && S.user === user) { S.ready = true; render(); } }, 10000);
+      unsubs.push(() => clearTimeout(slow));
       unsubs.push(planRef.onSnapshot({ includeMetadataChanges: true }, s => {
         S.plan = s.exists ? s.data() : null;
-        if (!s.exists && s.metadata.fromCache) return; // wait for the server before showing an empty account
+        if (!s.exists && s.metadata.fromCache) { if (S.ready) render(); return; } // wait for the server before showing an empty account
         offerMigration(user.uid);
         S.ready = true; render();
       }, fail));
@@ -441,6 +445,17 @@ button { cursor: pointer; }
         <div class="links"><button class="btn primary" data-act="reload">Reintentar</button><button class="btn ghost" data-act="go-local">Seguir sin cuenta</button></div>
       </section>`;
   }
+  function viewLoadError() {
+    const denied = S.loadError === "permission-denied";
+    return `${brandTop(esc(S.user.email || ""))}
+      <section class="welcome"><h2>No pude leer tus datos</h2>
+        <p class="obs">${denied
+          ? "Firebase no deja leer la base de datos. Revisá que en Firestore Database → Reglas estén publicadas las reglas de firestore.rules."
+          : "Firebase respondió con un error. Probá de nuevo en un rato."}</p>
+        <p class="obs">Código: <b>${esc(S.loadError)}</b></p>
+        <div class="links"><button class="btn primary" data-act="reload">Reintentar</button><button class="btn ghost" data-act="sign-out">Salir</button></div>
+      </section>`;
+  }
   function viewMigrate() {
     const m = S.migrate;
     return `${brandTop(esc(S.user.displayName || S.user.email || ""))}
@@ -559,6 +574,7 @@ button { cursor: pointer; }
   function view() {
     if (!S.ready) return `<p class="loading">Cargando tu plan…</p>`;
     if (S.auth === "nolib") return viewNoLib();
+    if (S.auth === "in" && S.loadError) return viewLoadError();
     if (S.auth === "out") return viewLogin();
     if (S.migrate) return viewMigrate();
     if (!S.plan || !S.plan.days || !S.plan.days.length) return viewWelcome();
