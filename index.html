@@ -1,4 +1,13 @@
+<!doctype html>
+<html lang="es">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#9f1c22">
+<meta name="description" content="Tu plan del gimnasio por día y el registro de tus pesos.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Libreta de Gym</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,7 +43,9 @@
   --ok: #62c58d; --ok-soft: #1b3326; color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { background: var(--bg); color: var(--ink); font: 400 16px/1.45 var(--font-body); -webkit-tap-highlight-color: transparent; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.45 var(--font-body); -webkit-tap-highlight-color: transparent; }
 .wrap { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
 h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.05; }
 button, input, select { font: inherit; color: inherit; }
@@ -138,7 +149,8 @@ button { cursor: pointer; }
   @keyframes drop { from { opacity: .4; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 }
 </style>
-
+</head>
+<body>
 <div class="wrap" id="app"><p class="loading">Cargando tu plan…</p></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
@@ -194,7 +206,13 @@ button { cursor: pointer; }
       const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
       const write = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
       S.plan = read("gym.plan"); S.logs = read("gym.logs") || {};
+      try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+      if (!S.plan) {
+        // First visit: start with the plan published next to the app.
+        try { const r = await fetch("plan.json", { cache: "no-cache" }); if (r.ok) { S.plan = await r.json(); write("gym.plan", S.plan); } } catch (e) {}
+      }
       store = {
+        replaceAll: async (p, l) => { S.plan = p; S.logs = l; write("gym.plan", p); write("gym.logs", l); render(); },
         savePlan: async p => { S.plan = p; write("gym.plan", p); render(); },
         saveLog: async (id, d) => { S.logs = { ...S.logs, [id]: d }; write("gym.logs", S.logs); render(); },
         deleteLog: async id => { const m = { ...S.logs }; delete m[id]; S.logs = m; write("gym.logs", m); render(); },
@@ -318,9 +336,16 @@ button { cursor: pointer; }
         <h2>Cargá tu plan</h2>
         <ol><li>Elegí el PDF que te pasó el profe.</li><li>Revisá que los ejercicios estén bien.</li><li>Guardalo. Queda listo para la próxima vez.</li></ol>
         ${viewImport()}
-      </section>${S.local ? localBanner() : ""}`;
+      </section>${viewBackup()}`;
   }
-  const localBanner = () => `<p class="banner">Abriste la app fuera de claude.ai: los datos se guardan solo en este navegador.</p>`;
+  const localBanner = () => "";
+  const viewBackup = () => !S.local ? "" : `<section class="plan-box"><h2>Copia de seguridad</h2>
+      <p>Tus pesos se guardan en este celular. Guardá una copia cada tanto (por ejemplo en Drive) para no perderlos si cambiás de teléfono o borrás los datos del navegador.</p>
+      <div class="links"><button class="btn" data-act="export">Guardar copia</button>
+      <label class="btn ghost" for="backup-in">Restaurar copia</label><input class="sr" type="file" id="backup-in" accept="application/json,.json"></div>
+      ${S.restore ? `<p class="obs">La copia del ${esc(S.restore.exportedAt ? fmtDate(S.restore.exportedAt) : "archivo")} reemplaza el plan y todos los pesos de este celular.</p>
+      <div class="links"><button class="btn primary" data-act="restore">Reemplazar con la copia</button><button class="btn ghost" data-act="cancel-restore">Cancelar</button></div>` : ""}
+    </section>`;
 
   function viewImport() {
     if (S.preview) {
@@ -426,7 +451,8 @@ button { cursor: pointer; }
       <section class="plan-box"><h2>Tu plan</h2>
         <p>${p.days.length} entrenamientos · ${p.days.reduce((n, x) => n + x.exercises.length, 0)} ejercicios${p.loadedAt ? ` · cargado el ${fmtDate(p.loadedAt)}` : ""}. Cuando el profe te dé uno nuevo, cargalo acá.</p>
         ${viewImport()}
-      </section>`;
+      </section>
+      ${viewBackup()}`;
   }
 
   function render() {
@@ -504,6 +530,9 @@ button { cursor: pointer; }
     else if (act === "del-entry") deleteEntry(id, b.dataset.d);
     else if (act === "save-plan") savePlan();
     else if (act === "cancel-import") { S.preview = null; render(); }
+    else if (act === "export") exportBackup();
+    else if (act === "restore") { const r = S.restore; S.restore = null; store.replaceAll(r.plan, r.logs || {}).then(() => toast("Copia restaurada")); }
+    else if (act === "cancel-restore") { S.restore = null; render(); }
   });
   document.addEventListener("input", e => {
     const t = e.target; if (!t.dataset || !t.dataset.field) return;
@@ -511,7 +540,30 @@ button { cursor: pointer; }
     draftOf(ex)[t.dataset.field] = t.value;
     if (t.dataset.field === "d") render();
   });
-  document.addEventListener("change", e => { if (e.target.id === "pdf-in") onFile(e.target.files[0]); });
+  document.addEventListener("change", e => {
+    if (e.target.id === "pdf-in") onFile(e.target.files[0]);
+    else if (e.target.id === "backup-in") readBackup(e.target.files[0]);
+  });
+
+  function exportBackup() {
+    const data = JSON.stringify({ app: "libreta-gym", exportedAt: today(), plan: S.plan, logs: S.logs }, null, 1);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+    a.download = `libreta-gym-${today()}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast("Copia guardada en Descargas");
+  }
+  async function readBackup(file) {
+    if (!file) return;
+    try {
+      const d = JSON.parse(await file.text());
+      if (!d || d.app !== "libreta-gym" || !d.plan || !Array.isArray(d.plan.days)) throw new Error();
+      S.restore = d; render();
+    } catch (e) { toast("Ese archivo no es una copia de la Libreta de Gym."); }
+  }
+
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
   document.addEventListener("submit", e => {
     e.preventDefault();
     const f = e.target;
@@ -529,3 +581,5 @@ button { cursor: pointer; }
   initStore();
 })();
 </script>
+</body>
+</html>
