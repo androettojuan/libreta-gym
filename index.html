@@ -143,7 +143,31 @@ button { cursor: pointer; }
 .banner { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); font-size: .88rem; }
 .loading { padding-block: 60px; text-align: center; color: var(--muted); }
 
-.toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-weight: 600; font-size: .9rem; max-width: calc(100% - 32px); z-index: 20; }
+/* Bottom tab bar */
+.wrap:has(.tabbar) { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; gap: 6px; justify-content: center; padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--line); }
+.tabbar button { flex: 1; max-width: 300px; min-height: 46px; border: 0; border-radius: var(--r); background: none; font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.tabbar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+
+/* Progress */
+.prog { margin-top: 16px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); display: flex; flex-direction: column; gap: 12px; }
+.prog h2 { font-size: 1.4rem; text-transform: uppercase; }
+.prog-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.big { font-family: var(--font-display); font-size: 2.4rem; font-weight: 700; line-height: 1; }
+.big small { font-size: 1rem; color: var(--muted); }
+.prog .delta { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; }
+.prog .hist li.body-row { grid-template-columns: 64px 1fr 0 auto; }
+.lifts { display: flex; flex-direction: column; gap: 8px; }
+.lifts .ex { background: var(--surface-2); }
+.ex-head.lift { grid-template-columns: minmax(0,1fr) auto; }
+.lifts .panel { background: var(--surface); }
+.chart { position: relative; touch-action: pan-y; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .ax { font: 500 10px var(--font-body); fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart .val { font: 700 13px var(--font-display); fill: var(--ink); }
+.tip { position: absolute; top: -6px; padding: 4px 8px; border-radius: 6px; background: var(--ink); color: var(--bg); font-size: .8rem; font-weight: 600; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+.toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-weight: 600; font-size: .9rem; max-width: calc(100% - 32px); z-index: 20; }
 @media (prefers-reduced-motion: no-preference) {
   .panel { animation: drop .16s ease-out; }
   @keyframes drop { from { opacity: .4; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
@@ -165,8 +189,10 @@ button { cursor: pointer; }
   const S = {
     ready: false, plan: null, logs: {}, day: 0, open: null, editing: null,
     drafts: {}, preview: null, importing: false, local: false, armed: null,
+    tab: "train", body: [], bodyDraft: null, progOpen: null,
   };
   try { S.day = parseInt(localStorage.getItem("gym.day"), 10) || 0; } catch (e) {}
+  try { if (localStorage.getItem("gym.tab") === "progress") S.tab = "progress"; } catch (e) {}
 
   const $ = (s, r = document) => r.querySelector(s);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -209,12 +235,14 @@ button { cursor: pointer; }
     if (db) {
       store = {
         savePlan: p => queue("plan", () => db.doc("app/plan").set(p)),
+        saveBody: e => queue("body", () => db.doc("app/body").set({ entries: e })),
         saveLog: (id, d) => queue("log/" + id, () => db.collection("log").doc(id).set(d)),
         deleteLog: id => queue("log/" + id, () => db.collection("log").doc(id).delete()),
       };
       const fail = e => toast("No se pudo leer tus datos (" + (e && e.code || "error") + "). Recargá la página.");
       db.doc("app/plan").onSnapshot(s => { S.plan = s.exists ? s.data() : null; S.ready = true; render(); }, fail);
       db.collection("log").onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.logs = m; render(); }, fail);
+      db.doc("app/body").onSnapshot(s => { S.body = (s.exists && s.data().entries) || []; render(); }, fail);
     } else if (lsRead("gym.mode") === "local") {
       initLocal();
     } else if (window.firebase) {
@@ -226,11 +254,12 @@ button { cursor: pointer; }
 
   async function initLocal() {
     S.local = true; S.auth = null;
-    S.plan = lsRead("gym.plan"); S.logs = lsRead("gym.logs") || {};
+    S.plan = lsRead("gym.plan"); S.logs = lsRead("gym.logs") || {}; S.body = lsRead("gym.body") || [];
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
     store = {
       replaceAll: async (p, l) => { S.plan = p; S.logs = l; lsWrite("gym.plan", p); lsWrite("gym.logs", l); render(); },
       savePlan: async p => { S.plan = p; lsWrite("gym.plan", p); render(); },
+      saveBody: async e => { S.body = e; lsWrite("gym.body", e); render(); },
       saveLog: async (id, d) => { S.logs = { ...S.logs, [id]: d }; lsWrite("gym.logs", S.logs); render(); },
       deleteLog: async id => { const m = { ...S.logs }; delete m[id]; S.logs = m; lsWrite("gym.logs", m); render(); },
     };
@@ -250,13 +279,14 @@ button { cursor: pointer; }
     let unsubs = [];
     auth.onAuthStateChanged(user => {
       unsubs.forEach(u => u()); unsubs = [];
-      Object.assign(S, { user, plan: null, logs: {}, open: null, editing: null, drafts: {}, preview: null, migrate: null });
+      Object.assign(S, { user, plan: null, logs: {}, body: [], bodyDraft: null, open: null, editing: null, drafts: {}, preview: null, migrate: null });
       if (!user) { S.auth = "out"; S.ready = true; render(); return; }
       S.auth = "in"; S.ready = false; render();
       const base = fs.collection("users").doc(user.uid);
       const planRef = base.collection("data").doc("plan"), logsRef = base.collection("logs");
       store = {
         savePlan: p => fire(planRef.set(p)),
+        saveBody: e => fire(base.collection("data").doc("body").set({ entries: e })),
         saveLog: (id, d) => fire(logsRef.doc(id).set(d)),
         deleteLog: id => fire(logsRef.doc(id).delete()),
         replaceAll: (p, l) => {
@@ -277,6 +307,7 @@ button { cursor: pointer; }
         S.ready = true; render();
       }, fail));
       unsubs.push(logsRef.onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.logs = m; render(); }, fail));
+      unsubs.push(base.collection("data").doc("body").onSnapshot(s => { S.body = (s.exists && s.data().entries) || []; render(); }, fail));
     });
   }
 
@@ -492,6 +523,109 @@ button { cursor: pointer; }
       <input class="sr" type="file" id="pdf-in" accept="application/pdf,.pdf"></div>`;
   }
 
+  // ---------- progress charts ----------
+  const dayMs = s => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  const niceStep = r => { const p = 10 ** Math.floor(Math.log10(r)); const m = r / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; };
+
+  // One series over real time: recessive grid, 2px line, ringed dots, last value labelled, tap/hover for each point.
+  function lineChart(pts, label) {
+    const W = 340, H = 180, L = 36, R = 14, T = 22, B = 24;
+    const xs = pts.map(p => dayMs(p.d)), ws = pts.map(p => p.w);
+    let x0 = Math.min(...xs), x1 = Math.max(...xs);
+    if (x0 === x1) { x0 -= 3 * 864e5; x1 += 3 * 864e5; }
+    let lo = Math.min(...ws), hi = Math.max(...ws);
+    const pad = (hi - lo) * 0.15 || Math.max(1, hi * 0.04);
+    lo -= pad; hi += pad;
+    const step = niceStep((hi - lo) / 3);
+    lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+    const X = v => L + ((v - x0) / (x1 - x0)) * (W - L - R), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const xy = pts.map((p, i) => [X(xs[i]), Y(p.w)]);
+    const f = n => n.toFixed(1);
+    const line = xy.map((p, i) => (i ? "L" : "M") + f(p[0]) + " " + f(p[1])).join(" ");
+    const area = `${line} L${f(xy[xy.length - 1][0])} ${H - B} L${f(xy[0][0])} ${H - B} Z`;
+    let grid = "";
+    for (let v = lo; v <= hi + step / 2; v += step) {
+      grid += `<line x1="${L}" x2="${W - R}" y1="${f(Y(v))}" y2="${f(Y(v))}" stroke="var(--line)" stroke-width="1"/>
+        <text x="${L - 6}" y="${f(Y(v) + 3.5)}" text-anchor="end" class="ax">${fmtW(v)}</text>`;
+    }
+    const ticks = [0, pts.length - 1];
+    if (pts.length > 4) ticks.splice(1, 0, Math.round((pts.length - 1) / 2));
+    const xl = [...new Set(ticks)].map((i, k, a) => `<text x="${f(xy[i][0])}" y="${H - 6}" text-anchor="${a.length > 1 && k === 0 ? "start" : k === a.length - 1 && a.length > 1 ? "end" : "middle"}" class="ax">${fmtDate(pts[i].d)}</text>`).join("");
+    const last = xy[xy.length - 1];
+    const data = xy.map((p, i) => [+f(p[0]), +f(p[1]), `${fmtDate(pts[i].d)} · ${fmtW(pts[i].w)} kg${pts[i].r ? " · " + pts[i].r + " reps" : ""}`]);
+    return `<div class="chart" data-w="${W}" data-pts="${esc(JSON.stringify(data))}">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}: de ${fmtW(ws[0])} a ${fmtW(ws[ws.length - 1])} kg">
+        ${grid}
+        <path d="${area}" fill="var(--accent-soft)" opacity=".7"/>
+        <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        ${xy.map(p => `<circle cx="${f(p[0])}" cy="${f(p[1])}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>`).join("")}
+        <text x="${f(Math.min(last[0], W - R))}" y="${f(last[1] - 10)}" text-anchor="end" class="val">${fmtW(ws[ws.length - 1])} kg</text>
+        ${xl}
+        <line class="xh" x1="0" x2="0" y1="${T - 6}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>
+        <circle class="xd" r="6" fill="var(--accent)" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>
+      </svg>
+      <div class="tip" hidden></div>
+    </div>`;
+  }
+
+  function chartHover(e) {
+    const c = e.target.closest && e.target.closest(".chart"); if (!c) return;
+    const svg = c.querySelector("svg"), r = svg.getBoundingClientRect(), W = +c.dataset.w;
+    const pts = JSON.parse(c.dataset.pts), x = ((e.clientX - r.left) / r.width) * W;
+    let best = pts[0]; for (const p of pts) if (Math.abs(p[0] - x) < Math.abs(best[0] - x)) best = p;
+    const xh = c.querySelector(".xh"), xd = c.querySelector(".xd"), tip = c.querySelector(".tip");
+    xh.setAttribute("x1", best[0]); xh.setAttribute("x2", best[0]); xh.setAttribute("visibility", "visible");
+    xd.setAttribute("cx", best[0]); xd.setAttribute("cy", best[1]); xd.setAttribute("visibility", "visible");
+    tip.textContent = best[2]; tip.hidden = false;
+    const left = (best[0] / W) * r.width;
+    tip.style.left = Math.max(4, Math.min(r.width - tip.offsetWidth - 4, left - tip.offsetWidth / 2)) + "px";
+  }
+  function chartLeave(e) {
+    const c = e.target.closest && e.target.closest(".chart"); if (!c) return;
+    c.querySelector(".xh").setAttribute("visibility", "hidden"); c.querySelector(".xd").setAttribute("visibility", "hidden"); c.querySelector(".tip").hidden = true;
+  }
+
+  const bodySorted = () => (S.body || []).slice().sort((a, b) => a.d.localeCompare(b.d));
+  const deltaChip = (a, b) => { const d = b - a; return `<span class="delta num ${d > 0 ? "up" : ""}">${d > 0 ? "+" : ""}${fmtW(d)} kg</span>`; };
+
+  function viewBody() {
+    const list = bodySorted(), last = list[list.length - 1];
+    if (!S.bodyDraft) S.bodyDraft = { w: last ? fmtW(last.w) : "", d: today() };
+    const dr = S.bodyDraft, same = list.some(e => e.d === dr.d);
+    return `<section class="prog"><div class="prog-head"><h2>Peso corporal</h2>
+        ${last ? `<span class="big num">${fmtW(last.w)}<small> kg</small></span>` : ""}</div>
+      ${list.length > 1 ? `<p class="obs">${deltaChip(list[0].w, last.w)} desde el ${fmtDate(list[0].d)} · ${list.length} registros</p>${lineChart(list, "Peso corporal")}` : `<p class="obs">${list.length ? "Con un registro más aparece el gráfico." : "Anotá tu peso para empezar a ver cómo cambia."}</p>`}
+      <form class="form" data-form="body">
+        <div class="field"><label for="bw">Tu peso (kg)</label>
+          <div class="stepper"><button type="button" data-act="bstep" data-d="-0.1" aria-label="Restar 100 g">−</button><input id="bw" data-bfield="w" class="num" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(dr.w)}"><button type="button" data-act="bstep" data-d="0.1" aria-label="Sumar 100 g">+</button></div></div>
+        <div class="field"><label for="bd">Fecha</label><input id="bd" data-bfield="d" type="date" value="${esc(dr.d)}" max="${today()}"></div>
+        <div class="actions"><button class="btn primary" type="submit">${same ? "Actualizar " + (dr.d === today() ? "hoy" : fmtDate(dr.d)) : "Guardar peso"}</button></div>
+      </form>
+      ${list.length ? `<div class="hist"><ol>${list.slice().reverse().slice(0, 6).map(e => `<li class="body-row"><span class="d num">${fmtDate(e.d)}</span><span class="w num">${fmtW(e.w)} kg</span><span></span>
+        <span><button class="${S.armed === "body|" + e.d ? "armed" : ""}" data-act="del-body" data-d="${e.d}">${S.armed === "body|" + e.d ? "¿Borrar?" : "Borrar"}</button></span></li>`).join("")}</ol></div>` : ""}
+    </section>`;
+  }
+
+  function viewLifts() {
+    const rows = [];
+    for (const d of S.plan.days) for (const ex of d.exercises) {
+      const pts = entriesOf(ex.id).filter(e => e.w != null);
+      if (pts.length) rows.push({ ex, pts, day: d.title.replace(/^Entrenamiento\s*/i, "Día ") });
+    }
+    if (!rows.length) return `<section class="prog"><h2>Tus levantamientos</h2><p class="obs">Cuando anotes pesos en tus ejercicios, acá vas a ver cómo van subiendo.</p></section>`;
+    return `<section class="prog"><h2>Tus levantamientos</h2><p class="obs">Tocá un ejercicio para ver su gráfico.</p>
+      <div class="lifts">${rows.map(({ ex, pts, day }) => {
+        const open = S.progOpen === ex.id, a = pts[0], b = pts[pts.length - 1];
+        return `<article class="ex ${open ? "open" : ""}">
+          <button class="ex-head lift" data-act="prog-toggle" data-id="${ex.id}" aria-expanded="${open}">
+            <span><span class="ex-name">${esc(ex.name)}</span><span class="ex-meta"><span>${esc(day)}</span><span>${pts.length} ${pts.length === 1 ? "registro" : "registros"}</span>${pts.length > 1 ? deltaChip(a.w, b.w) : ""}</span></span>
+            <span class="ex-last num"><b>${fmtW(b.w)}</b><span>kg</span></span>
+          </button>
+          ${open ? `<div class="panel">${pts.length > 1 ? lineChart(pts, ex.name) : `<p class="obs">Con un registro más aparece el gráfico.</p>`}
+            ${pts.length > 1 ? `<p class="obs">Máximo: <b>${fmtW(Math.max(...pts.map(p => p.w)))} kg</b> · Primer registro: ${fmtW(a.w)} kg el ${fmtDate(a.d)}</p>` : ""}</div>` : ""}
+        </article>`; }).join("")}</div></section>`;
+  }
+
   function viewTrend(entries) {
     const pts = entries.filter(e => e.w != null);
     if (pts.length < 2) return "";
@@ -580,6 +714,11 @@ button { cursor: pointer; }
         <div class="today num">${["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}</div>
       </header>
       ${S.local ? localBanner() : ""}
+      <nav class="tabbar" aria-label="Secciones">
+        <button data-act="tab" data-tab="train" aria-pressed="${S.tab === "train"}">Entrenar</button>
+        <button data-act="tab" data-tab="progress" aria-pressed="${S.tab === "progress"}">Progreso</button>
+      </nav>
+      ${S.tab === "progress" ? `${viewBody()}${viewLifts()}${viewAccount()}` : `
       <nav class="days" aria-label="Entrenamientos">${p.days.map((dd, i) => { const l = dayLast(dd); return `<button data-act="day" data-i="${i}" aria-pressed="${i === di}"><b>${esc(dd.title.replace(/^Entrenamiento\s*/i, "Día "))}</b><small>${l ? relDate(l) : dd.exercises.length + " ejercicios"}</small></button>`; }).join("")}</nav>
       ${p.notes && p.notes.length ? `<details class="notes"><summary>Indicaciones del profe</summary><ul>${p.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></details>` : ""}
       <section class="list" aria-label="${esc(day.title)}">${day.exercises.map(viewExercise).join("")}</section>
@@ -587,7 +726,7 @@ button { cursor: pointer; }
         <p>${p.days.length} entrenamientos · ${p.days.reduce((n, x) => n + x.exercises.length, 0)} ejercicios${p.loadedAt ? ` · cargado el ${fmtDate(p.loadedAt)}` : ""}. Cuando el profe te dé uno nuevo, cargalo acá.</p>
         ${viewImport()}
       </section>
-      ${viewBackup()}${viewAccount()}`;
+      ${viewBackup()}${viewAccount()}`}`;
   }
 
   function render() {
@@ -658,6 +797,10 @@ button { cursor: pointer; }
     const b = e.target.closest("[data-act]"); if (!b) return;
     const id = b.dataset.id, act = b.dataset.act;
     if (act === "toggle") { S.open = S.open === id ? null : id; S.editing = null; render(); }
+    else if (act === "tab") { S.tab = b.dataset.tab; try { localStorage.setItem("gym.tab", S.tab); } catch (er) {} render(); window.scrollTo({ top: 0 }); }
+    else if (act === "prog-toggle") { S.progOpen = S.progOpen === id ? null : id; render(); }
+    else if (act === "bstep") { const dr = S.bodyDraft; const v = (parseW(dr.w) || 0) + parseFloat(b.dataset.d); dr.w = fmtW(Math.max(0, Math.round(v * 10) / 10)); render(); }
+    else if (act === "del-body") deleteBody(b.dataset.d);
     else if (act === "day") { S.day = +b.dataset.i; S.open = null; S.editing = null; try { localStorage.setItem("gym.day", S.day); } catch (er) {} render(); window.scrollTo({ top: 0 }); }
     else if (act === "step") { const dr = draftOf(findEx(id)); const v = (parseW(dr.w) || 0) + parseFloat(b.dataset.d); dr.w = fmtW(Math.max(0, v)); render(); }
     else if (act === "edit") { S.editing = S.editing === id ? null : id; render(); }
@@ -666,7 +809,7 @@ button { cursor: pointer; }
     else if (act === "save-plan") savePlan();
     else if (act === "cancel-import") { S.preview = null; render(); }
     else if (act === "export") exportBackup();
-    else if (act === "restore") { const r = S.restore; S.restore = null; store.replaceAll(r.plan, r.logs || {}).then(() => toast("Copia restaurada")); }
+    else if (act === "restore") { const r = S.restore; S.restore = null; store.replaceAll(r.plan, r.logs || {}).then(() => (Array.isArray(r.body) ? store.saveBody(r.body) : null)).then(() => toast("Copia restaurada")); }
     else if (act === "cancel-restore") { S.restore = null; render(); }
     else if (act === "sign-in") signIn();
     else if (act === "sign-out") auth.signOut();
@@ -675,8 +818,30 @@ button { cursor: pointer; }
     else if (act === "reload") location.reload();
     else if (act === "migrate-yes") { const m = S.migrate; S.migrate = null; lsWrite("gym.migrated." + S.user.uid, true); store.replaceAll(m.plan, m.logs); toast("Datos subidos a tu cuenta"); render(); }
     else if (act === "migrate-no") { S.migrate = null; lsWrite("gym.migrated." + S.user.uid, true); render(); }  });
+  document.addEventListener("pointermove", chartHover);
+  document.addEventListener("pointerdown", chartHover);
+  document.addEventListener("pointerout", e => { if (!e.relatedTarget || !e.target.closest(".chart") || !e.relatedTarget.closest || e.relatedTarget.closest(".chart") !== e.target.closest(".chart")) chartLeave(e); });
+
+  async function saveBody() {
+    const dr = S.bodyDraft, w = parseW(dr.w);
+    if (w == null || w <= 0) { toast("Anotá tu peso en kg."); return; }
+    const d = dr.d || today();
+    const list = bodySorted().filter(e => e.d !== d);
+    list.push({ d, w }); list.sort((a, b) => a.d.localeCompare(b.d));
+    try { await store.saveBody(list); S.bodyDraft = { w: fmtW(w), d: today() }; toast(`Peso guardado: ${fmtW(w)} kg`); render(); }
+    catch (e) { toast(saveError(e)); }
+  }
+  async function deleteBody(d) {
+    const key = "body|" + d;
+    if (S.armed !== key) { S.armed = key; render(); setTimeout(() => { if (S.armed === key) { S.armed = null; render(); } }, 3000); return; }
+    S.armed = null;
+    try { await store.saveBody(bodySorted().filter(e => e.d !== d)); toast("Registro borrado"); } catch (e) { toast(saveError(e)); }
+  }
+
   document.addEventListener("input", e => {
-    const t = e.target; if (!t.dataset || !t.dataset.field) return;
+    const t = e.target;
+    if (t.dataset && t.dataset.bfield) { S.bodyDraft[t.dataset.bfield] = t.value; if (t.dataset.bfield === "d") render(); return; }
+    if (!t.dataset || !t.dataset.field) return;
     const ex = findEx(t.dataset.id); if (!ex) return;
     draftOf(ex)[t.dataset.field] = t.value;
     if (t.dataset.field === "d") render();
@@ -687,7 +852,7 @@ button { cursor: pointer; }
   });
 
   function exportBackup() {
-    const data = JSON.stringify({ app: "libreta-gym", exportedAt: today(), plan: S.plan, logs: S.logs }, null, 1);
+    const data = JSON.stringify({ app: "libreta-gym", exportedAt: today(), plan: S.plan, logs: S.logs, body: S.body }, null, 1);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
     a.download = `libreta-gym-${today()}.json`;
@@ -709,6 +874,7 @@ button { cursor: pointer; }
     e.preventDefault();
     const f = e.target;
     if (f.dataset.form === "log") saveEntry(f.dataset.id);
+    else if (f.dataset.form === "body") saveBody();
     else if (f.dataset.form === "edit") saveEdit(f);
   });
 
