@@ -9,6 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Libreta de Gym</title>
+<script>try { var t = localStorage.getItem("gym.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
@@ -29,6 +30,7 @@
   --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
   --font-body: "Barlow", "Segoe UI", Roboto, system-ui, sans-serif;
   --r: 10px;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -59,6 +61,9 @@ button { cursor: pointer; }
 .brand h1 { font-size: 2rem; font-weight: 700; letter-spacing: .01em; text-transform: uppercase; }
 .brand p { margin: 2px 0 0; color: var(--muted); font-size: .9rem; }
 .today { font-family: var(--font-display); font-size: .95rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; text-align: right; }
+.top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.theme-btn { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); padding: 0; }
+.theme-btn svg { width: 20px; height: 20px; }
 
 .days { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px; display: flex; gap: 6px; }
 .days button { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 8px 6px 7px; text-align: center; }
@@ -468,7 +473,13 @@ button { cursor: pointer; }
         ${viewImport()}
       </section>${viewBackup()}${viewAccount()}`;
   }
-  const brandTop = sub => `<header class="top"><div class="brand"><h1>Libreta de Gym</h1><p>${sub}</p></div></header>`;
+  const isDark = () => { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
+  const SUN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>`;
+  const MOON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>`;
+  const themeBtn = () => isDark()
+    ? `<button class="theme-btn" data-act="theme" aria-label="Cambiar a modo claro" title="Modo claro">${SUN}</button>`
+    : `<button class="theme-btn" data-act="theme" aria-label="Cambiar a modo oscuro" title="Modo oscuro">${MOON}</button>`;
+  const brandTop = sub => `<header class="top"><div class="brand"><h1>Libreta de Gym</h1><p>${sub}</p></div><div class="top-right">${themeBtn()}</div></header>`;
   function viewLogin() {
     if (S.confirmLocal) return `${brandTop("Tu plan y tus pesos, siempre a mano")}
       <section class="welcome warn" role="alertdialog" aria-labelledby="warn-t">
@@ -734,7 +745,7 @@ button { cursor: pointer; }
     const d = new Date();
     return `<header class="top">
         <div class="brand"><h1>${esc(p.gym || "Mi gimnasio")}</h1>${p.coach ? `<p>Profe: ${esc(p.coach)}</p>` : ""}</div>
-        <div class="today num">${["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}</div>
+        <div class="top-right">${themeBtn()}<div class="today num">${["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}</div></div>
       </header>
       ${S.local ? localBanner() : ""}
       <nav class="tabbar" aria-label="Secciones">
@@ -820,6 +831,7 @@ button { cursor: pointer; }
     const b = e.target.closest("[data-act]"); if (!b) return;
     const id = b.dataset.id, act = b.dataset.act;
     if (act === "toggle") { S.open = S.open === id ? null : id; S.editing = null; render(); }
+    else if (act === "theme") { const t = isDark() ? "light" : "dark"; document.documentElement.setAttribute("data-theme", t); try { localStorage.setItem("gym.theme", t); } catch (er) {} render(); }
     else if (act === "tab") { S.tab = b.dataset.tab; try { localStorage.setItem("gym.tab", S.tab); } catch (er) {} render(); window.scrollTo({ top: 0 }); }
     else if (act === "prog-toggle") { S.progOpen = S.progOpen === id ? null : id; render(); }
     else if (act === "bstep") { const dr = S.bodyDraft; const v = (parseW(dr.w) || 0) + parseFloat(b.dataset.d); dr.w = fmtW(Math.max(0, Math.round(v * 10) / 10)); render(); }
