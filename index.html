@@ -141,6 +141,10 @@ button { cursor: pointer; }
 .preview .day ul { margin: 0; padding-left: 18px; font-size: .88rem; }
 .preview .day li span { color: var(--muted); }
 .banner { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); font-size: .88rem; }
+.welcome.warn { border-color: var(--accent); background: var(--accent-soft); }
+.welcome.warn h2 { color: var(--accent); }
+.welcome.warn p, .welcome.warn ul { margin: 0; }
+.welcome.warn ul { padding-left: 20px; }
 .loading { padding-block: 60px; text-align: center; color: var(--muted); }
 
 /* Bottom tab bar */
@@ -455,13 +459,21 @@ button { cursor: pointer; }
   }
   const brandTop = sub => `<header class="top"><div class="brand"><h1>Libreta de Gym</h1><p>${sub}</p></div></header>`;
   function viewLogin() {
+    if (S.confirmLocal) return `${brandTop("Tu plan y tus pesos, siempre a mano")}
+      <section class="welcome warn" role="alertdialog" aria-labelledby="warn-t">
+        <h2 id="warn-t">⚠ Podés perder tus datos</h2>
+        <p>Sin cuenta, tu plan y tus pesos quedan guardados <b>solo en este celular</b>. Se pierden si:</p>
+        <ul><li>borrás los datos o la caché de Chrome,</li><li>desinstalás Chrome o la app,</li><li>cambiás o perdés el celular.</li></ul>
+        <p>Con tu cuenta de Google quedan guardados en la nube y no se pierden.</p>
+        <div class="links"><button class="btn primary" data-act="sign-in">Entrar con Google</button><button class="btn ghost" data-act="go-local-ok">Entiendo, seguir sin cuenta</button></div>
+      </section>`;
     return `${brandTop("Tu plan y tus pesos, siempre a mano")}
       <section class="welcome">
         <h2>Entrá con tu cuenta</h2>
         <p class="obs">Tus pesos quedan guardados en tu cuenta de Google y los ves desde cualquier celular. Cada persona que entra tiene su propio plan y sus propios pesos.</p>
         <div class="links"><button class="btn primary" data-act="sign-in">Entrar con Google</button></div>
         <button class="btn ghost" data-act="go-local">Seguir sin cuenta</button>
-        <p class="obs">Sin cuenta, los datos quedan solo en este celular.</p>
+        <p class="obs">Sin cuenta, los datos quedan solo en este celular y podés perderlos.</p>
       </section>`;
   }
   function viewNoLib() {
@@ -813,7 +825,8 @@ button { cursor: pointer; }
     else if (act === "cancel-restore") { S.restore = null; render(); }
     else if (act === "sign-in") signIn();
     else if (act === "sign-out") auth.signOut();
-    else if (act === "go-local") { lsWrite("gym.mode", "local"); location.reload(); }
+    else if (act === "go-local") { if (S.auth === "out") { S.confirmLocal = true; render(); window.scrollTo(0, 0); } else { lsWrite("gym.mode", "local"); location.reload(); } }
+    else if (act === "go-local-ok") { lsWrite("gym.mode", "local"); location.reload(); }
     else if (act === "go-account") { lsWrite("gym.mode", null); location.reload(); }
     else if (act === "reload") location.reload();
     else if (act === "migrate-yes") { const m = S.migrate; S.migrate = null; lsWrite("gym.migrated." + S.user.uid, true); store.replaceAll(m.plan, m.logs); toast("Datos subidos a tu cuenta"); render(); }
