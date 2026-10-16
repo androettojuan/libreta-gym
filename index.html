@@ -1,0 +1,531 @@
+<meta charset="utf-8">
+<title>Libreta de Gym</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: one phone-width column; sticky day switcher; each exercise is a row that opens into a logging panel. */
+:root {
+  --bg: #f4f0ef;
+  --surface: #ffffff;
+  --surface-2: #faf6f5;
+  --ink: #1e1617;
+  --muted: #6e6062;
+  --line: #e3d9d8;
+  --accent: #9f1c22;
+  --accent-ink: #ffffff;
+  --accent-soft: #f5e2e1;
+  --ok: #2b7a4b;
+  --ok-soft: #e1f1e7;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "Barlow", "Segoe UI", Roboto, system-ui, sans-serif;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141011; --surface: #1e1819; --surface-2: #251e1f; --ink: #f2eaea; --muted: #a8999b;
+    --line: #362c2d; --accent: #f0585e; --accent-ink: #1c0d0e; --accent-soft: #3a1d1f;
+    --ok: #62c58d; --ok-soft: #1b3326; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141011; --surface: #1e1819; --surface-2: #251e1f; --ink: #f2eaea; --muted: #a8999b;
+  --line: #362c2d; --accent: #f0585e; --accent-ink: #1c0d0e; --accent-soft: #3a1d1f;
+  --ok: #62c58d; --ok-soft: #1b3326; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 16px/1.45 var(--font-body); -webkit-tap-highlight-color: transparent; }
+.wrap { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.05; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Header */
+.top { padding-block: 20px 12px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.brand h1 { font-size: 2rem; font-weight: 700; letter-spacing: .01em; text-transform: uppercase; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: .9rem; }
+.today { font-family: var(--font-display); font-size: .95rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; text-align: right; }
+
+.days { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px; display: flex; gap: 6px; }
+.days button { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 8px 6px 7px; text-align: center; }
+.days b { display: block; font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+.days small { display: block; font-size: .75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.days button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.days button[aria-pressed="true"] small { color: inherit; opacity: .85; }
+
+.notes { margin-block: 8px 4px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }
+.notes summary { padding: 10px 14px; font-weight: 600; cursor: pointer; font-size: .92rem; }
+.notes ul { margin: 0; padding: 0 14px 12px 32px; color: var(--muted); font-size: .92rem; }
+.notes li + li { margin-top: 4px; }
+
+/* Exercise list */
+.list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.ex { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.ex.open { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.ex-head { width: 100%; display: grid; grid-template-columns: 28px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; background: none; border: 0; text-align: left; }
+.ex-idx { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--muted); }
+.ex.done .ex-idx { color: var(--ok); }
+.ex-name { display: block; font-weight: 600; line-height: 1.25; }
+.ex-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: .82rem; color: var(--muted); }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); }
+.chip.sr-chip { font-family: var(--font-display); font-weight: 600; font-size: .95rem; color: var(--ink); letter-spacing: .02em; }
+.chip.ok { background: var(--ok-soft); border-color: transparent; color: var(--ok); font-weight: 600; }
+.ex-last { text-align: right; line-height: 1; }
+.ex-last b { font-family: var(--font-display); font-size: 1.7rem; font-weight: 700; }
+.ex-last span { font-family: var(--font-display); font-size: .95rem; color: var(--muted); margin-left: 2px; }
+.ex-last small { display: block; font-size: .72rem; color: var(--muted); margin-top: 3px; }
+.ex-last.none { font-size: .8rem; color: var(--muted); }
+
+.panel { border-top: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; gap: 14px; background: var(--surface-2); }
+.links { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); text-decoration: none; color: var(--ink); font-weight: 600; font-size: .92rem; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.ghost { background: none; }
+.btn.danger { color: var(--accent); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.obs { margin: 0; font-size: .9rem; color: var(--muted); }
+
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field.full { grid-column: 1 / -1; }
+.field label { font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.field input { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.stepper { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; }
+.stepper button { border: 1px solid var(--line); background: var(--surface); font-size: 1.3rem; font-weight: 600; }
+.stepper button:first-child { border-radius: 8px 0 0 8px; }
+.stepper button:last-child { border-radius: 0 8px 8px 0; }
+.stepper input { border-radius: 0; border-inline: 0; text-align: center; font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; }
+.form .actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.form .actions .btn { flex: 1; }
+
+.hist h3 { font-size: 1.05rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.trend { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.trend svg { flex: 1; min-width: 0; height: 52px; }
+.trend .delta { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; white-space: nowrap; }
+.delta.up { color: var(--ok); }
+.hist ol { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.hist li { display: grid; grid-template-columns: 64px 76px minmax(0,1fr) auto; gap: 8px; align-items: center; padding: 6px 4px 6px 10px; font-size: .9rem; }
+.hist li + li { border-top: 1px solid var(--line); }
+.hist .d { color: var(--muted); }
+.hist .w { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; }
+.hist .rn { min-width: 0; overflow-wrap: anywhere; }
+.hist .rn small { color: var(--muted); display: block; }
+.hist li button { border: 0; background: none; padding: 6px 8px; font-size: .8rem; color: var(--muted); border-radius: 6px; }
+.hist li button.armed { background: var(--accent); color: var(--accent-ink); }
+.hist .empty { padding: 10px; color: var(--muted); font-size: .9rem; }
+
+/* Plan / import */
+.plan-box { margin-top: 28px; padding: 16px; border: 1px dashed var(--line); border-radius: var(--r); display: flex; flex-direction: column; gap: 10px; }
+.plan-box h2 { font-size: 1.4rem; text-transform: uppercase; }
+.plan-box p { margin: 0; color: var(--muted); font-size: .92rem; }
+.welcome { margin-top: 24px; padding: 22px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); display: flex; flex-direction: column; gap: 12px; }
+.welcome h2 { font-size: 2rem; text-transform: uppercase; }
+.welcome ol { margin: 0; padding-left: 20px; color: var(--muted); }
+.preview { display: flex; flex-direction: column; gap: 10px; }
+.preview .day { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 10px 12px; }
+.preview .day h3 { font-size: 1.15rem; text-transform: uppercase; margin-bottom: 4px; }
+.preview .day ul { margin: 0; padding-left: 18px; font-size: .88rem; }
+.preview .day li span { color: var(--muted); }
+.banner { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); font-size: .88rem; }
+.loading { padding-block: 60px; text-align: center; color: var(--muted); }
+
+.toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-weight: 600; font-size: .9rem; max-width: calc(100% - 32px); z-index: 20; }
+@media (prefers-reduced-motion: no-preference) {
+  .panel { animation: drop .16s ease-out; }
+  @keyframes drop { from { opacity: .4; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+}
+</style>
+
+<div class="wrap" id="app"><p class="loading">Cargando tu plan…</p></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- state ----------
+  const S = {
+    ready: false, plan: null, logs: {}, day: 0, open: null, editing: null,
+    drafts: {}, preview: null, importing: false, local: false, armed: null,
+  };
+  try { S.day = parseInt(localStorage.getItem("gym.day"), 10) || 0; } catch (e) {}
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  const pad = n => String(n).padStart(2, "0");
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const fmtDate = s => { const [, m, d] = s.split("-"); return `${+d} ${MONTHS[+m - 1]}`; };
+  const daysAgo = s => { const [y, m, d] = s.split("-").map(Number); const t = new Date(); return Math.round((new Date(t.getFullYear(), t.getMonth(), t.getDate()) - new Date(y, m - 1, d)) / 864e5); };
+  const relDate = s => { const n = daysAgo(s); return n <= 0 ? "hoy" : n === 1 ? "ayer" : n < 30 ? `hace ${n} días` : fmtDate(s); };
+  const fmtW = w => (w == null || w === "" ? "—" : String(Math.round(w * 100) / 100).replace(".", ","));
+  const slug = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "ejercicio";
+  const safeUrl = u => (/^https?:\/\//i.test(u || "") ? u : "");
+
+  let toastTimer;
+  function toast(msg) {
+    const t = $("#toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+
+  // ---------- storage: artifact db, or this device as fallback ----------
+  let store = null;
+  const chains = {};
+  const queue = (key, fn) => (chains[key] = (chains[key] || Promise.resolve()).then(fn, fn));
+
+  async function initStore() {
+    let db = null;
+    try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch (e) { db = null; }
+    if (db) {
+      store = {
+        savePlan: p => queue("plan", () => db.doc("app/plan").set(p)),
+        saveLog: (id, d) => queue("log/" + id, () => db.collection("log").doc(id).set(d)),
+        deleteLog: id => queue("log/" + id, () => db.collection("log").doc(id).delete()),
+      };
+      const fail = e => toast("No se pudo leer tus datos (" + (e && e.code || "error") + "). Recargá la página.");
+      db.doc("app/plan").onSnapshot(s => { S.plan = s.exists ? s.data() : null; S.ready = true; render(); }, fail);
+      db.collection("log").onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.logs = m; render(); }, fail);
+    } else {
+      S.local = true;
+      const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+      const write = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+      S.plan = read("gym.plan"); S.logs = read("gym.logs") || {};
+      store = {
+        savePlan: async p => { S.plan = p; write("gym.plan", p); render(); },
+        saveLog: async (id, d) => { S.logs = { ...S.logs, [id]: d }; write("gym.logs", S.logs); render(); },
+        deleteLog: async id => { const m = { ...S.logs }; delete m[id]; S.logs = m; write("gym.logs", m); render(); },
+      };
+      S.ready = true; render();
+    }
+  }
+
+  // ---------- PDF reading ----------
+  function loadScript(src) {
+    return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("No se pudo cargar el lector de PDF. Revisá tu conexión.")); document.head.appendChild(s); });
+  }
+  async function pdfLib() {
+    if (!window.pdfjsLib) {
+      const base = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+      await loadScript(base + "pdf.min.js");
+      await loadScript(base + "pdf.worker.min.js"); // runs on the page itself; separate workers are not allowed here
+    }
+    return window.pdfjsLib;
+  }
+
+  const HEADERS = [[/^ejercicio/i, "name"], [/^video/i, "video"], [/^series/i, "sets"], [/^rep/i, "reps"], [/^descanso/i, "rest"], [/^observ/i, "obs"]];
+
+  async function parsePlanPdf(buf) {
+    const lib = await pdfLib();
+    const pdf = await lib.getDocument({ data: buf, isEvalSupported: false }).promise;
+    const rows = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      const links = (await page.getAnnotations()).filter(a => a.subtype === "Link" && a.url).map(a => {
+        const [x0, y0, x1, y1] = a.rect; return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: Math.min(y0, y1), y1: Math.max(y0, y1), url: a.url };
+      });
+      const items = tc.items.filter(i => i.str && i.str.trim()).map(i => ({
+        x0: i.transform[4], x1: i.transform[4] + i.width, y: i.transform[5], h: Math.abs(i.transform[3]) || 8, str: i.str.replace(/\s+/g, " ").trim(),
+      })).sort((a, b) => b.y - a.y || a.x0 - b.x0);
+      const pageRows = [];
+      for (const it of items) {
+        let r = pageRows.find(r => Math.abs(r.y - it.y) < 4);
+        if (!r) { r = { y: it.y, items: [] }; pageRows.push(r); }
+        r.items.push(it);
+      }
+      pageRows.sort((a, b) => b.y - a.y);
+      for (const r of pageRows) {
+        r.items.sort((a, b) => a.x0 - b.x0);
+        r.text = r.items.map(i => i.str).join(" ");
+        const mid = r.y + (r.items[0].h * 0.3);
+        r.links = links.filter(l => mid >= l.y0 - 1 && mid <= l.y1 + 1);
+        rows.push(r);
+      }
+    }
+
+    const plan = { gym: "", coach: "", notes: [], days: [] };
+    let day = null, cols = null, inNotes = false, m;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i], t = r.text;
+      if ((m = t.match(/Profe(?:sor|sora)?\s*:?\s*(.+)/i)) && !plan.coach) {
+        plan.coach = m[1].trim();
+        const prev = rows[i - 1];
+        if (prev) plan.gym = prev.items.filter(x => !/^logo$/i.test(x.str)).map(x => x.str).join(" ");
+        continue;
+      }
+      if (/observaciones generales/i.test(t)) { inNotes = true; continue; }
+      if ((m = t.match(/^(Entrenamiento|D[íi]a|Rutina)\s*(\d+)/i))) {
+        inNotes = false;
+        day = { title: `${m[1][0].toUpperCase()}${m[1].slice(1).toLowerCase()} ${m[2]}`, exercises: [] };
+        plan.days.push(day); cols = null; continue;
+      }
+      if (inNotes) {
+        if (/n[úu]mero de entrenamientos/i.test(t)) { inNotes = false; continue; }
+        const line = t.replace(/^\s*-\s*/, "").trim();
+        if (line) plan.notes.push(line);
+        continue;
+      }
+      if (/FIN_ENTRENAMIENTO/i.test(t)) { day = null; cols = null; continue; }
+      if (r.items.some(x => /^ejercicio$/i.test(x.str))) {
+        if (!day) { day = { title: `Entrenamiento ${plan.days.length + 1}`, exercises: [] }; plan.days.push(day); }
+        cols = r.items.map(x => { const h = HEADERS.find(([re]) => re.test(x.str)); return { key: h ? h[1] : "other", c: (x.x0 + x.x1) / 2 }; });
+        continue;
+      }
+      if (!day || !cols) continue;
+      const ex = { name: [], sets: [], reps: [], rest: [], obs: [], video: "" };
+      for (const it of r.items) {
+        const c = (it.x0 + it.x1) / 2;
+        const link = r.links.find(l => c >= l.x0 - 2 && c <= l.x1 + 2);
+        if (link) { ex.video = ex.video || link.url; continue; }
+        let best = cols[0];
+        for (const col of cols) if (Math.abs(col.c - c) < Math.abs(best.c - c)) best = col;
+        if (best.key === "name" || it.x0 < cols[0].c) ex.name.push(it.str);
+        else if (ex[best.key] && best.key !== "video") ex[best.key].push(it.str);
+      }
+      if (!ex.video && r.links.length) ex.video = r.links[0].url;
+      const name = ex.name.join(" ").replace(/\s*\|\s*$/, "").trim();
+      if (!name || /^n[ºo°]\s*de\s*ej/i.test(name)) continue;
+      day.exercises.push({ name, sets: ex.sets.join(" "), reps: ex.reps.join(" "), rest: ex.rest.join(" "), obs: ex.obs.join(" "), video: safeUrl(ex.video) });
+    }
+    plan.days = plan.days.filter(d => d.exercises.length);
+    if (!plan.days.length) throw new Error("No encontré ejercicios en ese PDF. ¿Es la planilla del gimnasio?");
+    const used = new Set();
+    for (const d of plan.days) for (const e of d.exercises) {
+      let id = slug(e.name), n = 2; while (used.has(id)) id = slug(e.name) + "-" + n++;
+      used.add(id); e.id = id;
+    }
+    return plan;
+  }
+
+  // ---------- derived data ----------
+  const entriesOf = id => ((S.logs[id] && S.logs[id].entries) || []).slice().sort((a, b) => a.d.localeCompare(b.d));
+  const lastOf = id => { const e = entriesOf(id); return e[e.length - 1] || null; };
+  const lastWeightOf = id => { const e = entriesOf(id).filter(x => x.w != null); return e.length ? e[e.length - 1].w : null; };
+  function dayLast(d) { let best = ""; for (const e of d.exercises) { const l = lastOf(e.id); if (l && l.d > best) best = l.d; } return best; }
+  function draftOf(ex) {
+    if (!S.drafts[ex.id]) { const w = lastWeightOf(ex.id); S.drafts[ex.id] = { w: w == null ? "" : fmtW(w), r: "", n: "", d: today() }; }
+    return S.drafts[ex.id];
+  }
+
+  // ---------- views ----------
+  function viewWelcome() {
+    return `<header class="top"><div class="brand"><h1>Libreta de Gym</h1><p>Tu plan y tus pesos, siempre a mano</p></div></header>
+      <section class="welcome">
+        <h2>Cargá tu plan</h2>
+        <ol><li>Elegí el PDF que te pasó el profe.</li><li>Revisá que los ejercicios estén bien.</li><li>Guardalo. Queda listo para la próxima vez.</li></ol>
+        ${viewImport()}
+      </section>${S.local ? localBanner() : ""}`;
+  }
+  const localBanner = () => `<p class="banner">Abriste la app fuera de claude.ai: los datos se guardan solo en este navegador.</p>`;
+
+  function viewImport() {
+    if (S.preview) {
+      const p = S.preview, total = p.days.reduce((n, d) => n + d.exercises.length, 0);
+      return `<div class="preview">
+        <p><b>${p.days.length} entrenamientos · ${total} ejercicios</b>${p.coach ? ` · Profe: ${esc(p.coach)}` : ""}</p>
+        ${p.days.map(d => `<div class="day"><h3>${esc(d.title)}</h3><ul>${d.exercises.map(e => `<li>${esc(e.name)} <span>${esc([e.sets && e.sets + " series", e.reps].filter(Boolean).join(" · "))}</span></li>`).join("")}</ul></div>`).join("")}
+        ${S.plan ? `<p class="obs">Se reemplaza el plan actual. Tus pesos anotados se conservan en los ejercicios que tengan el mismo nombre.</p>` : ""}
+        <div class="links"><button class="btn primary" data-act="save-plan">Guardar este plan</button><button class="btn ghost" data-act="cancel-import">Cancelar</button></div>
+      </div>`;
+    }
+    return `<div class="links"><label class="btn ${S.plan ? "" : "primary"}" for="pdf-in">${S.importing ? "Leyendo PDF…" : S.plan ? "Cargar un plan nuevo (PDF)" : "Elegir PDF"}</label>
+      <input class="sr" type="file" id="pdf-in" accept="application/pdf,.pdf"></div>`;
+  }
+
+  function viewTrend(entries) {
+    const pts = entries.filter(e => e.w != null);
+    if (pts.length < 2) return "";
+    const ws = pts.map(e => e.w), lo = Math.min(...ws), hi = Math.max(...ws), span = hi - lo || 1;
+    const W = 200, H = 44, P = 4;
+    const xy = pts.map((e, i) => [P + (i * (W - 2 * P)) / (pts.length - 1), P + (H - 2 * P) * (1 - (e.w - lo) / span)]);
+    const line = xy.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+    const area = line + ` L${xy[xy.length - 1][0].toFixed(1)} ${H} L${xy[0][0].toFixed(1)} ${H} Z`;
+    const end = xy[xy.length - 1], diff = ws[ws.length - 1] - ws[0];
+    return `<div class="trend">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Evolución del peso">
+        <path d="${area}" fill="var(--accent-soft)" stroke="none"/>
+        <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+        <path d="M${end[0].toFixed(1)} ${end[1].toFixed(1)} h0" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <span class="delta num ${diff > 0 ? "up" : ""}">${diff > 0 ? "+" : ""}${fmtW(diff)} kg<br><small style="font-weight:500;color:var(--muted)">desde ${fmtDate(pts[0].d)}</small></span>
+    </div>`;
+  }
+
+  function viewPanel(ex) {
+    const id = ex.id, entries = entriesOf(id);
+    if (S.editing === id) {
+      return `<div class="panel"><form class="form" data-form="edit" data-id="${id}">
+        <div class="field full"><label for="en-${id}">Nombre</label><input id="en-${id}" name="name" value="${esc(ex.name)}" required></div>
+        <div class="field"><label for="es-${id}">Series</label><input id="es-${id}" name="sets" value="${esc(ex.sets)}" inputmode="numeric"></div>
+        <div class="field"><label for="er-${id}">Reps</label><input id="er-${id}" name="reps" value="${esc(ex.reps)}"></div>
+        <div class="field"><label for="ed-${id}">Descanso</label><input id="ed-${id}" name="rest" value="${esc(ex.rest)}"></div>
+        <div class="field"><label for="ev-${id}">Video (link)</label><input id="ev-${id}" name="video" value="${esc(ex.video)}" inputmode="url"></div>
+        <div class="field full"><label for="eo-${id}">Observaciones</label><input id="eo-${id}" name="obs" value="${esc(ex.obs)}"></div>
+        <div class="actions"><button class="btn primary" type="submit">Guardar cambios</button><button class="btn ghost" type="button" data-act="edit" data-id="${id}">Cancelar</button></div>
+      </form></div>`;
+    }
+    const dr = draftOf(ex);
+    const sameDay = entries.some(e => e.d === dr.d);
+    return `<div class="panel">
+      <div class="links">
+        ${ex.video ? `<a class="btn" href="${esc(ex.video)}" target="_blank" rel="noopener">▶ Ver video</a>` : ""}
+        <button class="btn ghost" data-act="edit" data-id="${id}">Editar ejercicio</button>
+      </div>
+      ${ex.obs || ex.rest ? `<p class="obs">${esc([ex.rest && "Descanso: " + ex.rest, ex.obs].filter(Boolean).join(" · "))}</p>` : ""}
+      <form class="form" data-form="log" data-id="${id}">
+        <div class="field full"><label for="w-${id}">Peso (kg)</label>
+          <div class="stepper"><button type="button" data-act="step" data-id="${id}" data-d="-2.5" aria-label="Restar 2,5 kg">−</button><input id="w-${id}" data-field="w" data-id="${id}" class="num" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(dr.w)}"><button type="button" data-act="step" data-id="${id}" data-d="2.5" aria-label="Sumar 2,5 kg">+</button></div>
+        </div>
+        <div class="field"><label for="r-${id}">Reps hechas</label><input id="r-${id}" data-field="r" data-id="${id}" autocomplete="off" placeholder="${esc(ex.reps || "ej. 10")}" value="${esc(dr.r)}"></div>
+        <div class="field"><label for="d-${id}">Fecha</label><input id="d-${id}" data-field="d" data-id="${id}" type="date" value="${esc(dr.d)}" max="${today()}"></div>
+        <div class="field full"><label for="n-${id}">Nota</label><input id="n-${id}" data-field="n" data-id="${id}" autocomplete="off" placeholder="Ej: última serie al fallo" value="${esc(dr.n)}"></div>
+        <div class="actions"><button class="btn primary" type="submit">${sameDay ? "Actualizar " + (dr.d === today() ? "hoy" : fmtDate(dr.d)) : "Guardar"}</button></div>
+      </form>
+      <div class="hist"><h3>Historial</h3>${viewTrend(entries)}
+        <ol>${entries.length ? entries.slice().reverse().map(e => `<li>
+          <span class="d num">${fmtDate(e.d)}</span>
+          <span class="w num">${e.w != null ? fmtW(e.w) + " kg" : "—"}</span>
+          <span class="rn">${esc(e.r ? e.r + " reps" : "")}${e.n ? `<small>${esc(e.n)}</small>` : ""}</span>
+          <span><button data-act="load-entry" data-id="${id}" data-d="${e.d}">Editar</button><button class="${S.armed === id + "|" + e.d ? "armed" : ""}" data-act="del-entry" data-id="${id}" data-d="${e.d}">${S.armed === id + "|" + e.d ? "¿Borrar?" : "Borrar"}</button></span>
+        </li>`).join("") : `<li class="empty">Todavía no anotaste este ejercicio.</li>`}</ol>
+      </div>
+    </div>`;
+  }
+
+  function viewExercise(ex, i) {
+    const last = lastOf(ex.id), lw = lastWeightOf(ex.id), done = last && last.d === today();
+    const open = S.open === ex.id;
+    return `<article class="ex ${open ? "open" : ""} ${done ? "done" : ""}">
+      <button class="ex-head" data-act="toggle" data-id="${ex.id}" aria-expanded="${open}">
+        <span class="ex-idx num">${done ? "✓" : i + 1}</span>
+        <span><span class="ex-name">${esc(ex.name)}</span>
+          <span class="ex-meta">${ex.sets || ex.reps ? `<span class="chip sr-chip num">${ex.reps ? `${esc(ex.sets || "?")} × ${esc(ex.reps)}` : `${esc(ex.sets)} series`}</span>` : ""}${done ? `<span class="chip ok">Hecho hoy</span>` : ""}</span></span>
+        ${lw != null ? `<span class="ex-last num"><b>${fmtW(lw)}</b><span>kg</span><small>${relDate(last.d)}</small></span>` : `<span class="ex-last none">${last ? relDate(last.d) : "sin anotar"}</span>`}
+      </button>
+      ${open ? viewPanel(ex) : ""}
+    </article>`;
+  }
+
+  function view() {
+    if (!S.ready) return `<p class="loading">Cargando tu plan…</p>`;
+    if (!S.plan || !S.plan.days || !S.plan.days.length) return viewWelcome();
+    const p = S.plan, di = Math.min(S.day, p.days.length - 1), day = p.days[di];
+    const d = new Date();
+    return `<header class="top">
+        <div class="brand"><h1>${esc(p.gym || "Mi gimnasio")}</h1>${p.coach ? `<p>Profe: ${esc(p.coach)}</p>` : ""}</div>
+        <div class="today num">${["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}</div>
+      </header>
+      ${S.local ? localBanner() : ""}
+      <nav class="days" aria-label="Entrenamientos">${p.days.map((dd, i) => { const l = dayLast(dd); return `<button data-act="day" data-i="${i}" aria-pressed="${i === di}"><b>${esc(dd.title.replace(/^Entrenamiento\s*/i, "Día "))}</b><small>${l ? relDate(l) : dd.exercises.length + " ejercicios"}</small></button>`; }).join("")}</nav>
+      ${p.notes && p.notes.length ? `<details class="notes"><summary>Indicaciones del profe</summary><ul>${p.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></details>` : ""}
+      <section class="list" aria-label="${esc(day.title)}">${day.exercises.map(viewExercise).join("")}</section>
+      <section class="plan-box"><h2>Tu plan</h2>
+        <p>${p.days.length} entrenamientos · ${p.days.reduce((n, x) => n + x.exercises.length, 0)} ejercicios${p.loadedAt ? ` · cargado el ${fmtDate(p.loadedAt)}` : ""}. Cuando el profe te dé uno nuevo, cargalo acá.</p>
+        ${viewImport()}
+      </section>`;
+  }
+
+  function render() {
+    const a = document.activeElement, aid = a && a.id;
+    let sel = null; try { sel = aid && a.selectionStart != null ? [a.selectionStart, a.selectionEnd] : null; } catch (e) {}
+    $("#app").innerHTML = view();
+    if (aid) { const el = document.getElementById(aid); if (el) { el.focus({ preventScroll: true }); if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
+  }
+
+  // ---------- actions ----------
+  const findEx = id => { for (const d of S.plan.days) for (const e of d.exercises) if (e.id === id) return e; return null; };
+  const parseW = s => { const v = parseFloat(String(s).replace(",", ".")); return isFinite(v) ? Math.round(v * 100) / 100 : null; };
+
+  async function saveEntry(id) {
+    const ex = findEx(id), dr = draftOf(ex), w = parseW(dr.w);
+    if (w == null && !dr.r.trim()) { toast("Anotá el peso o las reps."); return; }
+    const d = dr.d || today();
+    const entries = entriesOf(id).filter(e => e.d !== d);
+    entries.push({ d, w, r: dr.r.trim(), n: dr.n.trim() });
+    entries.sort((a, b) => a.d.localeCompare(b.d));
+    try {
+      await store.saveLog(id, { name: ex.name, entries });
+      S.drafts[id] = { w: w == null ? "" : fmtW(w), r: "", n: "", d: today() };
+      toast(`Guardado: ${ex.name.slice(0, 28)}${w != null ? " · " + fmtW(w) + " kg" : ""}`);
+      render();
+    } catch (e) { toast(saveError(e)); }
+  }
+  const saveError = e => (e && e.code === "quota_exceeded" ? "No hay más espacio para guardar." : "No se pudo guardar. Probá de nuevo.");
+
+  async function deleteEntry(id, d) {
+    const key = id + "|" + d;
+    if (S.armed !== key) { S.armed = key; render(); setTimeout(() => { if (S.armed === key) { S.armed = null; render(); } }, 3000); return; }
+    S.armed = null;
+    const entries = entriesOf(id).filter(e => e.d !== d);
+    try {
+      if (entries.length) await store.saveLog(id, { name: findEx(id).name, entries }); else await store.deleteLog(id);
+      toast("Registro borrado");
+    } catch (e) { toast(saveError(e)); }
+  }
+
+  async function onFile(file) {
+    if (!file) return;
+    S.importing = true; render();
+    try { S.preview = await parsePlanPdf(await file.arrayBuffer()); }
+    catch (e) { toast(e && e.message ? e.message : "No pude leer ese PDF."); }
+    S.importing = false; render();
+  }
+
+  async function savePlan() {
+    const p = S.preview; if (!p) return;
+    p.loadedAt = today();
+    try { await store.savePlan(p); S.preview = null; S.day = 0; S.open = null; toast("Plan guardado"); render(); window.scrollTo(0, 0); }
+    catch (e) { toast(saveError(e)); }
+  }
+
+  async function saveEdit(form) {
+    const id = form.dataset.id, f = new FormData(form), p = clone(S.plan);
+    for (const d of p.days) for (const e of d.exercises) if (e.id === id) {
+      e.name = (f.get("name") || "").trim() || e.name;
+      e.sets = (f.get("sets") || "").trim(); e.reps = (f.get("reps") || "").trim();
+      e.rest = (f.get("rest") || "").trim(); e.obs = (f.get("obs") || "").trim();
+      e.video = safeUrl((f.get("video") || "").trim());
+    }
+    try { await store.savePlan(p); S.editing = null; toast("Ejercicio actualizado"); render(); } catch (e) { toast(saveError(e)); }
+  }
+
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-act]"); if (!b) return;
+    const id = b.dataset.id, act = b.dataset.act;
+    if (act === "toggle") { S.open = S.open === id ? null : id; S.editing = null; render(); }
+    else if (act === "day") { S.day = +b.dataset.i; S.open = null; S.editing = null; try { localStorage.setItem("gym.day", S.day); } catch (er) {} render(); window.scrollTo({ top: 0 }); }
+    else if (act === "step") { const dr = draftOf(findEx(id)); const v = (parseW(dr.w) || 0) + parseFloat(b.dataset.d); dr.w = fmtW(Math.max(0, v)); render(); }
+    else if (act === "edit") { S.editing = S.editing === id ? null : id; render(); }
+    else if (act === "load-entry") { const en = entriesOf(id).find(x => x.d === b.dataset.d); if (en) { S.drafts[id] = { w: en.w == null ? "" : fmtW(en.w), r: en.r || "", n: en.n || "", d: en.d }; render(); const w = document.getElementById("w-" + id); if (w) w.focus(); } }
+    else if (act === "del-entry") deleteEntry(id, b.dataset.d);
+    else if (act === "save-plan") savePlan();
+    else if (act === "cancel-import") { S.preview = null; render(); }
+  });
+  document.addEventListener("input", e => {
+    const t = e.target; if (!t.dataset || !t.dataset.field) return;
+    const ex = findEx(t.dataset.id); if (!ex) return;
+    draftOf(ex)[t.dataset.field] = t.value;
+    if (t.dataset.field === "d") render();
+  });
+  document.addEventListener("change", e => { if (e.target.id === "pdf-in") onFile(e.target.files[0]); });
+  document.addEventListener("submit", e => {
+    e.preventDefault();
+    const f = e.target;
+    if (f.dataset.form === "log") saveEntry(f.dataset.id);
+    else if (f.dataset.form === "edit") saveEdit(f);
+  });
+
+  // Keep the screen on while the app is open at the gym (if the device allows it).
+  let lock = null;
+  const keepAwake = () => { if (lock || !navigator.wakeLock) return; navigator.wakeLock.request("screen").then(l => { lock = l; l.addEventListener("release", () => { lock = null; }); }).catch(() => {}); };
+  document.addEventListener("pointerdown", keepAwake);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") keepAwake(); });
+
+  window.__gym = { parsePlanPdf };
+  initStore();
+})();
+</script>
