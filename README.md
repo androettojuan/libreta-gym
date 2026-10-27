@@ -26,9 +26,18 @@ Al entrar con una cuenta nueva en un celular que ya tenía pesos anotados sin cu
 
 ## Cargar un plan nuevo
 
-Desde la app: **Cargar un plan nuevo (PDF)**. Lee la planilla del gimnasio con pdf.js (columnas Ejercicio / Video / Series / Reps / Descanso / Observaciones, bloques "Entrenamiento N") y muestra una vista previa antes de guardar. Los pesos anotados se conservan en los ejercicios con el mismo nombre.
+Desde la app: **Cargar un plan nuevo (PDF)**. Lee la planilla del gimnasio con pdf.js y muestra una vista previa antes de guardar. Con **Corregir antes de guardar** se puede arreglar lo que haya leído mal. Los pesos anotados se conservan en los ejercicios con el mismo nombre.
 
-Cada persona nueva arranca sin plan y carga el suyo desde el PDF.
+Entiende dos tipos de planilla:
+
+- **En lista**: bloques "Entrenamiento N" con las columnas Ejercicio / Video / Series / Reps / Descanso / Observaciones.
+- **En grilla**: una columna por día (*LUNES (tren inferior)*, *MARTES*…) y un ejercicio por celda, como *Press banca plano 3x8-10*. Las celdas **COMBINADOS** arman grupos de ejercicios que se hacen juntos y quedan como *Combinado 1, 2…* en las observaciones. Del encabezado toma el profe, el gimnasio y las observaciones.
+
+## Armar el plan a mano
+
+Sin PDF: **Armar mi plan a mano** (al entrar sin plan) o **Editar mi plan** (abajo de los ejercicios). Se ponen los días y en cada uno los ejercicios con series, repeticiones, descanso, observaciones y link al video; se pueden agregar, quitar y reordenar. Si se cambia el nombre de un ejercicio, su historial de pesos sigue.
+
+Cada persona nueva arranca sin plan y carga el suyo desde el PDF o lo arma a mano.
 
 ## Archivos
 
