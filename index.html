@@ -203,6 +203,16 @@ button { cursor: pointer; }
 .save-bar { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 8px; margin-top: 16px; padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--bg); border-top: 1px solid var(--line); }
 .save-bar .btn { flex: 1; }
 
+/* Bottom box: account, share, tip jar */
+.foot { margin-top: 28px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.foot-row { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; padding: 10px 12px 10px 14px; }
+.foot-row + .foot-row { border-top: 1px solid var(--line); }
+.foot-row b { display: block; font-weight: 600; font-size: .92rem; }
+.foot-row small { display: block; color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
+.foot-row > div:first-child { min-width: 0; flex: 1 1 150px; }
+.foot-act { display: flex; gap: 6px; margin-left: auto; }
+.btn.sm { min-height: 36px; padding: 6px 12px; font-size: .85rem; }
+
 /* Install banner */
 .install { margin-top: 12px; padding: 12px 14px; border-radius: var(--r); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); display: grid; grid-template-columns: 44px minmax(0,1fr); gap: 4px 12px; align-items: center; }
 .install img { width: 44px; height: 44px; border-radius: 10px; grid-row: span 2; }
@@ -581,7 +591,7 @@ button { cursor: pointer; }
         ${viewImport()}
         ${S.preview ? "" : `<p class="obs">¿No tenés el PDF? Escribí vos los ejercicios de cada día, con sus series y repeticiones.</p>
         <div class="links"><button class="btn" data-act="b-new">Armar mi plan a mano</button></div>`}
-      </section>${viewBackup()}${viewAccount()}${viewShare()}`;
+      </section>${viewBackup()}${viewFooter(false)}`;
   }
   const isDark = () => { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
   const SUN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>`;
@@ -606,7 +616,7 @@ button { cursor: pointer; }
         <div class="links"><button class="btn primary" data-act="sign-in">Entrar con Google</button></div>
         <button class="btn ghost" data-act="go-local">Seguir sin cuenta</button>
         <p class="obs">Sin cuenta, los datos quedan solo en este celular y podés perderlos.</p>
-      </section>${viewShare()}`;
+      </section>${viewFooter(false)}`;
   }
   function viewNoLib() {
     return `${brandTop("Sin conexión")}
@@ -635,18 +645,6 @@ button { cursor: pointer; }
         <p class="obs">Si estos datos son de otra persona, elegí "Empezar de cero".</p>
       </section>`;
   }
-  function viewAccount() {
-    if (S.auth === "in") return `<section class="plan-box"><h2>Cuenta</h2>
-        <p>${esc(S.user.displayName || "")}${S.user.email ? ` · ${esc(S.user.email)}` : ""}</p>
-        <div class="links"><button class="btn ghost" data-act="sign-out">Salir</button></div></section>`;
-    if (S.local && window.firebase) return `<section class="plan-box"><h2>Cuenta</h2>
-        <p>Estás usando la app sin cuenta. Entrá con Google para guardar tus pesos en la nube y verlos desde cualquier celular.</p>
-        <div class="links"><button class="btn" data-act="go-account">Entrar con Google</button></div></section>`;
-    return "";
-  }
-  const viewDonate = () => `<section class="plan-box"><h2>¿Te gusta la app?</h2>
-      <p>Invitame un cafecito y me ayudás a seguir haciendo apps. ¡Gracias! 💪</p>
-      <div class="links"><a class="btn" href="https://cafecito.app/voltacore" target="_blank" rel="noopener">☕ Invitar un cafecito</a></div></section>`;
   // ---------- install and share ----------
   // Android/Chrome hands over its install prompt; iPhone has none, so it gets the steps instead.
   const APP_URL = new URL("./", location.href).href;
@@ -680,9 +678,17 @@ button { cursor: pointer; }
     try { await navigator.clipboard.writeText(APP_URL); toast("Link copiado: pegalo donde quieras"); }
     catch (e) { window.open("https://wa.me/?text=" + encodeURIComponent(data.text + " " + APP_URL), "_blank", "noopener"); }
   }
-  const viewShare = () => `<section class="plan-box"><h2>Compartí la app</h2>
-      <p>Pasásela a quien entrene con vos. Cada uno entra con su cuenta y tiene su propio plan y sus pesos.</p>
-      <div class="links"><button class="btn" data-act="share">Compartir la app</button>${canInstall() ? `<button class="btn ghost" data-act="install">Instalar en este celular</button>` : ""}</div></section>`;
+
+  // Account, sharing and the tip jar share one compact box at the bottom: a line each, button on the right.
+  const footRow = (title, sub, actions) => `<div class="foot-row"><div><b>${title}</b>${sub ? `<small>${sub}</small>` : ""}</div><div class="foot-act">${actions}</div></div>`;
+  function viewFooter(donate) {
+    const rows = [];
+    if (S.auth === "in") rows.push(footRow(esc(S.user.displayName || "Tu cuenta"), esc(S.user.email || ""), `<button class="btn sm ghost" data-act="sign-out">Salir</button>`));
+    else if (S.local && window.firebase) rows.push(footRow("Sin cuenta", "Tus pesos quedan solo en este celular", `<button class="btn sm" data-act="go-account">Entrar con Google</button>`));
+    rows.push(footRow("Compartí la app", "Pasásela a quien entrene con vos", `${canInstall() ? `<button class="btn sm ghost" data-act="install">Instalar</button>` : ""}<button class="btn sm" data-act="share">Compartir</button>`));
+    if (donate) rows.push(footRow("¿Te gusta la app?", "Invitame un cafecito ¡Gracias! 💪", `<a class="btn sm" href="https://cafecito.app/voltacore" target="_blank" rel="noopener">☕ Invitar</a>`));
+    return `<section class="foot">${rows.join("")}</section>`;
+  }
 
   const localBanner = () => "";
   const viewBackup = () => !S.local ? "" : `<section class="plan-box"><h2>Copia de seguridad</h2>
@@ -998,7 +1004,7 @@ button { cursor: pointer; }
         <button data-act="tab" data-tab="train" aria-pressed="${S.tab === "train"}">Entrenar</button>
         <button data-act="tab" data-tab="progress" aria-pressed="${S.tab === "progress"}">Progreso</button>
       </nav>
-      ${S.tab === "progress" ? `${viewBody()}${viewLifts()}${viewAccount()}${viewShare()}${viewDonate()}` : `
+      ${S.tab === "progress" ? `${viewBody()}${viewLifts()}${viewFooter(true)}` : `
       <nav class="days" aria-label="Entrenamientos">${p.days.map((dd, i) => { const l = dayLast(dd); return `<button data-act="day" data-i="${i}" aria-pressed="${i === di}" title="${esc(dd.title)}"><b>${esc(dayShort(dd.title))}</b><small>${l ? relDate(l) : dayFocus(dd.title) || dd.exercises.length + " ejercicios"}</small></button>`; }).join("")}</nav>
       ${p.notes && p.notes.length ? `<details class="notes"><summary>Indicaciones</summary><ul>${p.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></details>` : ""}
       <section class="list" aria-label="${esc(day.title)}">${day.exercises.map(viewExercise).join("")}</section>
@@ -1007,7 +1013,7 @@ button { cursor: pointer; }
         ${S.preview ? "" : `<div class="links"><button class="btn" data-act="b-edit">Editar mi plan</button></div>`}
         ${viewImport()}
       </section>
-      ${viewBackup()}${viewAccount()}${viewShare()}${viewDonate()}`}`;
+      ${viewBackup()}${viewFooter(true)}`}`;
   }
 
   function render() {
