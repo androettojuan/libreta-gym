@@ -11,6 +11,12 @@ App web para ver el plan del gimnasio por día y anotar los pesos de cada ejerci
 
 Queda con su ícono, se abre en pantalla completa y funciona sin internet después de la primera vez.
 
+La primera vez que se abre desde el navegador, la app muestra arriba un cartel **Instalá la app**: en Android abre el instalador de Chrome; en iPhone explica cómo agregarla desde **Compartir → Agregar a inicio**. Con «Ahora no» el cartel no vuelve a aparecer, pero en **Compartí la app** (abajo de todo) queda el botón **Instalar en este celular**. Una vez instalada no se muestra más.
+
+## Compartir la app
+
+En **Compartí la app**, abajo de cada pantalla, el botón **Compartir la app** abre el menú de compartir del celular (WhatsApp, etc.) con el link. Si el navegador no lo tiene, copia el link.
+
 ## Dónde se guardan los datos
 
 - **Con cuenta (Entrar con Google):** en Firebase (proyecto `libreta-gym`), en Firestore bajo `users/<uid>/data/plan` y `users/<uid>/logs/<ejercicio>`. Cada persona ve solo lo suyo (ver `firestore.rules`). Funciona sin señal y sincroniza al volver la conexión.

@@ -203,6 +203,13 @@ button { cursor: pointer; }
 .save-bar { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 8px; margin-top: 16px; padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--bg); border-top: 1px solid var(--line); }
 .save-bar .btn { flex: 1; }
 
+/* Install banner */
+.install { margin-top: 12px; padding: 12px 14px; border-radius: var(--r); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); display: grid; grid-template-columns: 44px minmax(0,1fr); gap: 4px 12px; align-items: center; }
+.install img { width: 44px; height: 44px; border-radius: 10px; grid-row: span 2; }
+.install > b { font-family: var(--font-display); font-size: 1.2rem; text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
+.install p { margin: 0; font-size: .88rem; color: var(--muted); }
+.install .links { grid-column: 1 / -1; margin-top: 6px; }
+
 .toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-weight: 600; font-size: .9rem; max-width: calc(100% - 32px); z-index: 20; }
 @media (prefers-reduced-motion: no-preference) {
   .panel { animation: drop .16s ease-out; }
@@ -574,7 +581,7 @@ button { cursor: pointer; }
         ${viewImport()}
         ${S.preview ? "" : `<p class="obs">¿No tenés el PDF? Escribí vos los ejercicios de cada día, con sus series y repeticiones.</p>
         <div class="links"><button class="btn" data-act="b-new">Armar mi plan a mano</button></div>`}
-      </section>${viewBackup()}${viewAccount()}`;
+      </section>${viewBackup()}${viewAccount()}${viewShare()}`;
   }
   const isDark = () => { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
   const SUN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>`;
@@ -599,7 +606,7 @@ button { cursor: pointer; }
         <div class="links"><button class="btn primary" data-act="sign-in">Entrar con Google</button></div>
         <button class="btn ghost" data-act="go-local">Seguir sin cuenta</button>
         <p class="obs">Sin cuenta, los datos quedan solo en este celular y podés perderlos.</p>
-      </section>`;
+      </section>${viewShare()}`;
   }
   function viewNoLib() {
     return `${brandTop("Sin conexión")}
@@ -640,6 +647,43 @@ button { cursor: pointer; }
   const viewDonate = () => `<section class="plan-box"><h2>¿Te gusta la app?</h2>
       <p>Invitame un cafecito y me ayudás a seguir haciendo apps. ¡Gracias! 💪</p>
       <div class="links"><a class="btn" href="https://cafecito.app/voltacore" target="_blank" rel="noopener">☕ Invitar un cafecito</a></div></section>`;
+  // ---------- install and share ----------
+  // Android/Chrome hands over its install prompt; iPhone has none, so it gets the steps instead.
+  const APP_URL = new URL("./", location.href).href;
+  const installed = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  let installEvt = null;
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; if (S.ready) render(); });
+  window.addEventListener("appinstalled", () => { installEvt = null; toast("App instalada"); render(); });
+  const canInstall = () => !installed() && (installEvt || isIos);
+
+  function installBanner() {
+    if (!canInstall() || lsRead("gym.install.no")) return "";
+    return `<aside class="install" aria-label="Instalar la app"><img src="icon-192.png" alt="">
+        <b>Instalá la app</b>
+        <p>${installEvt ? "Queda en la pantalla de tu celular y se abre como una app, aunque no tengas señal." : "Tocá <b>Compartir</b> (el cuadrado con la flecha) y después <b>Agregar a inicio</b>."}</p>
+        <div class="links">${installEvt ? `<button class="btn primary" data-act="install">Instalar</button>` : ""}<button class="btn ghost" data-act="install-no">${installEvt ? "Ahora no" : "Entendido"}</button></div>
+      </aside>`;
+  }
+  async function install() {
+    if (!installEvt) { lsWrite("gym.install.no", null); render(); window.scrollTo(0, 0); return; }
+    const e = installEvt; installEvt = null;
+    try { e.prompt(); await e.userChoice; } catch (er) {}
+    render();
+  }
+  async function shareApp() {
+    const data = { title: "Libreta de Gym", text: "Mirá esta app para seguir tu plan del gimnasio y anotar tus pesos:", url: APP_URL };
+    if (navigator.share) {
+      try { await navigator.share(data); } catch (e) { if (e && e.name !== "AbortError") toast("No se pudo compartir."); }
+      return;
+    }
+    try { await navigator.clipboard.writeText(APP_URL); toast("Link copiado: pegalo donde quieras"); }
+    catch (e) { window.open("https://wa.me/?text=" + encodeURIComponent(data.text + " " + APP_URL), "_blank", "noopener"); }
+  }
+  const viewShare = () => `<section class="plan-box"><h2>Compartí la app</h2>
+      <p>Pasásela a quien entrene con vos. Cada uno entra con su cuenta y tiene su propio plan y sus pesos.</p>
+      <div class="links"><button class="btn" data-act="share">Compartir la app</button>${canInstall() ? `<button class="btn ghost" data-act="install">Instalar en este celular</button>` : ""}</div></section>`;
+
   const localBanner = () => "";
   const viewBackup = () => !S.local ? "" : `<section class="plan-box"><h2>Copia de seguridad</h2>
       <p>Tus pesos se guardan en este celular. Guardá una copia cada tanto (por ejemplo en Drive) para no perderlos si cambiás de teléfono o borrás los datos del navegador.</p>
@@ -954,7 +998,7 @@ button { cursor: pointer; }
         <button data-act="tab" data-tab="train" aria-pressed="${S.tab === "train"}">Entrenar</button>
         <button data-act="tab" data-tab="progress" aria-pressed="${S.tab === "progress"}">Progreso</button>
       </nav>
-      ${S.tab === "progress" ? `${viewBody()}${viewLifts()}${viewAccount()}${viewDonate()}` : `
+      ${S.tab === "progress" ? `${viewBody()}${viewLifts()}${viewAccount()}${viewShare()}${viewDonate()}` : `
       <nav class="days" aria-label="Entrenamientos">${p.days.map((dd, i) => { const l = dayLast(dd); return `<button data-act="day" data-i="${i}" aria-pressed="${i === di}" title="${esc(dd.title)}"><b>${esc(dayShort(dd.title))}</b><small>${l ? relDate(l) : dayFocus(dd.title) || dd.exercises.length + " ejercicios"}</small></button>`; }).join("")}</nav>
       ${p.notes && p.notes.length ? `<details class="notes"><summary>Indicaciones</summary><ul>${p.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></details>` : ""}
       <section class="list" aria-label="${esc(day.title)}">${day.exercises.map(viewExercise).join("")}</section>
@@ -963,13 +1007,13 @@ button { cursor: pointer; }
         ${S.preview ? "" : `<div class="links"><button class="btn" data-act="b-edit">Editar mi plan</button></div>`}
         ${viewImport()}
       </section>
-      ${viewBackup()}${viewAccount()}${viewDonate()}`}`;
+      ${viewBackup()}${viewAccount()}${viewShare()}${viewDonate()}`}`;
   }
 
   function render() {
     const a = document.activeElement, aid = a && a.id;
     let sel = null; try { sel = aid && a.selectionStart != null ? [a.selectionStart, a.selectionEnd] : null; } catch (e) {}
-    $("#app").innerHTML = view();
+    $("#app").innerHTML = (S.ready ? installBanner() : "") + view();
     if (aid) { const el = document.getElementById(aid); if (el) { el.focus({ preventScroll: true }); if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
   }
 
@@ -1043,6 +1087,9 @@ button { cursor: pointer; }
       return;
     }
     if (act === "toggle") { S.open = S.open === id ? null : id; S.editing = null; render(); }
+    else if (act === "install") install();
+    else if (act === "install-no") { lsWrite("gym.install.no", true); render(); }
+    else if (act === "share") shareApp();
     else if (act === "theme") { const t = isDark() ? "light" : "dark"; document.documentElement.setAttribute("data-theme", t); try { localStorage.setItem("gym.theme", t); } catch (er) {} render(); }
     else if (act === "tab") { S.tab = b.dataset.tab; try { localStorage.setItem("gym.tab", S.tab); } catch (er) {} render(); window.scrollTo({ top: 0 }); }
     else if (act === "prog-toggle") { S.progOpen = S.progOpen === id ? null : id; render(); }
