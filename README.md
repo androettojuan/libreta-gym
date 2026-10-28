@@ -2,7 +2,16 @@
 
 App web para ver el plan del gimnasio por día y anotar los pesos de cada ejercicio, pensada para usar desde el celular (Android).
 
-**Abrir la app:** https://androettojuan.github.io/libreta-gym/
+**Abrir la app:** https://libreta-gym.web.app (Firebase Hosting, el link para compartir). También sigue en https://androettojuan.github.io/libreta-gym/ (GitHub Pages).
+
+## Publicar
+
+La misma app vive en los dos lugares; el manifest usa rutas relativas para que funcione en los dos.
+
+- **GitHub Pages:** se publica sola al subir a `main`.
+- **Firebase Hosting:** a mano, con `firebase deploy --only hosting` (config en `firebase.json`).
+
+En cada cambio subir la versión de `CACHE` en `sw.js` y publicar en los dos.
 
 ## Instalar en Android
 
@@ -53,6 +62,7 @@ Cada persona nueva arranca sin plan y carga el suyo desde el PDF o lo arma a man
 | `firestore.rules` | Reglas de seguridad de Firestore (cada usuario accede solo a lo suyo). |
 | `manifest.webmanifest`, `icon*.png`, `icon.svg` | Datos e íconos para instalarla como app. |
 | `sw.js` | Service worker: deja la app disponible sin conexión. |
+| `firebase.json`, `.firebaserc` | Publicación en Firebase Hosting. |
 
 ## Estructura de datos
 
