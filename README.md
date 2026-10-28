@@ -2,7 +2,9 @@
 
 App web para ver el plan del gimnasio por día y anotar los pesos de cada ejercicio, pensada para usar desde el celular (Android).
 
-**Abrir la app:** https://libreta-gym.web.app (Firebase Hosting, el link para compartir). También sigue en https://androettojuan.github.io/libreta-gym/ (GitHub Pages).
+**Abrir la app:** https://libreta-gym.firebaseapp.com (Firebase Hosting, el link para compartir). También sigue en https://androettojuan.github.io/libreta-gym/ (GitHub Pages).
+
+`libreta-gym.web.app` lleva sola a `libreta-gym.firebaseapp.com`: ahí el ingreso con Google pasa por otro dominio y algunos navegadores pierden la sesión a la vuelta, sin mostrar error. No redirige si en ese celular ya se usó la app sin cuenta en `web.app`, para no dejar esos datos atrás.
 
 ## Publicar
 

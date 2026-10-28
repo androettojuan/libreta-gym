@@ -9,6 +9,14 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Libreta de Gym</title>
+<script>
+// web.app signs in through another domain and some browsers lose the session on the way back:
+// send people to firebaseapp.com, unless this phone already has notes kept here without an account.
+try {
+  if (location.hostname === "libreta-gym.web.app" && !["gym.plan", "gym.logs", "gym.body", "gym.mode"].some(function (k) { return localStorage.getItem(k) != null; }))
+    location.replace("https://libreta-gym.firebaseapp.com" + location.pathname + location.search + location.hash);
+} catch (e) {}
+</script>
 <script>try { var t = localStorage.getItem("gym.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
