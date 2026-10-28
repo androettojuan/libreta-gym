@@ -637,6 +637,9 @@ button { cursor: pointer; }
         <div class="links"><button class="btn" data-act="go-account">Entrar con Google</button></div></section>`;
     return "";
   }
+  const viewDonate = () => `<section class="plan-box"><h2>¿Te gusta la app?</h2>
+      <p>Invitame un cafecito y me ayudás a seguir haciendo apps. ¡Gracias! 💪</p>
+      <div class="links"><a class="btn" href="https://cafecito.app/voltacore" target="_blank" rel="noopener">☕ Invitar un cafecito</a></div></section>`;
   const localBanner = () => "";
   const viewBackup = () => !S.local ? "" : `<section class="plan-box"><h2>Copia de seguridad</h2>
       <p>Tus pesos se guardan en este celular. Guardá una copia cada tanto (por ejemplo en Drive) para no perderlos si cambiás de teléfono o borrás los datos del navegador.</p>
@@ -951,7 +954,7 @@ button { cursor: pointer; }
         <button data-act="tab" data-tab="train" aria-pressed="${S.tab === "train"}">Entrenar</button>
         <button data-act="tab" data-tab="progress" aria-pressed="${S.tab === "progress"}">Progreso</button>
       </nav>
-      ${S.tab === "progress" ? `${viewBody()}${viewLifts()}${viewAccount()}` : `
+      ${S.tab === "progress" ? `${viewBody()}${viewLifts()}${viewAccount()}${viewDonate()}` : `
       <nav class="days" aria-label="Entrenamientos">${p.days.map((dd, i) => { const l = dayLast(dd); return `<button data-act="day" data-i="${i}" aria-pressed="${i === di}" title="${esc(dd.title)}"><b>${esc(dayShort(dd.title))}</b><small>${l ? relDate(l) : dayFocus(dd.title) || dd.exercises.length + " ejercicios"}</small></button>`; }).join("")}</nav>
       ${p.notes && p.notes.length ? `<details class="notes"><summary>Indicaciones</summary><ul>${p.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></details>` : ""}
       <section class="list" aria-label="${esc(day.title)}">${day.exercises.map(viewExercise).join("")}</section>
@@ -960,7 +963,7 @@ button { cursor: pointer; }
         ${S.preview ? "" : `<div class="links"><button class="btn" data-act="b-edit">Editar mi plan</button></div>`}
         ${viewImport()}
       </section>
-      ${viewBackup()}${viewAccount()}`}`;
+      ${viewBackup()}${viewAccount()}${viewDonate()}`}`;
   }
 
   function render() {
