@@ -22,6 +22,13 @@ En cada cambio subir la versión de `CACHE` en `sw.js` y publicar en los dos.
 
 Queda con su ícono, se abre en pantalla completa y funciona sin internet después de la primera vez.
 
+## Sin conexión
+
+- La app (página, íconos, letras y librerías de Firebase) queda guardada en el celular desde la primera vez que se abre (`sw.js`). Con señal débil, si el servidor tarda más de 3,5 s, abre la copia guardada y baja la actualización por detrás.
+- Con cuenta, Firestore guarda una copia de los datos en el celular: sin señal se ve y se anota todo igual, y los cambios se suben solos al volver la conexión, aunque la app se haya cerrado en el medio.
+- Arriba aparece un aviso de **Sin conexión**, después **Subiendo tus cambios…**, y al terminar un mensaje de que se subieron.
+- Lo que necesita internet: entrar con la cuenta por primera vez, cargar un PDF (si nunca se cargó uno) y ver los videos. Para salir de la cuenta hay que esperar a que se suban los cambios.
+
 La primera vez que se abre desde el navegador, la app muestra arriba un cartel **Instalá la app**: en Android abre el instalador de Chrome; en iPhone explica cómo agregarla desde **Compartir → Agregar a inicio**. Con «Ahora no» el cartel no vuelve a aparecer, pero en la fila **Compartí la app** (abajo de todo) queda el botón **Instalar**. Una vez instalada no se muestra más.
 
 ## Compartir la app

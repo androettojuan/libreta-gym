@@ -13,7 +13,7 @@
 // web.app signs in through another domain and some browsers lose the session on the way back:
 // send people to firebaseapp.com, unless this phone already has notes kept here without an account.
 try {
-  if (location.hostname === "libreta-gym.web.app" && !["gym.plan", "gym.logs", "gym.body", "gym.mode"].some(function (k) { return localStorage.getItem(k) != null; }))
+  if (location.hostname === "libreta-gym.web.app" && navigator.onLine && !["gym.plan", "gym.logs", "gym.body", "gym.mode"].some(function (k) { return localStorage.getItem(k) != null; }))
     location.replace("https://libreta-gym.firebaseapp.com" + location.pathname + location.search + location.hash);
 } catch (e) {}
 </script>
@@ -246,6 +246,9 @@ button { cursor: pointer; }
 body:has(.timer:not([hidden])) .wrap { padding-bottom: calc(176px + env(safe-area-inset-bottom, 0px)); }
 body:has(.timer:not([hidden])) .toast { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
 @media (prefers-reduced-motion: no-preference) { .timer.done { animation: pulse 1s ease-in-out 3; } @keyframes pulse { 50% { transform: translateX(-50%) scale(1.03); } } }
+.net { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); font-size: .88rem; color: var(--muted); }
+.net.off { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); color: var(--ink); }
+.net b { color: var(--accent); }
 .rest-def { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 .rest-def b { display: block; font-size: .95rem; }
 .rest-def small { display: block; color: var(--muted); font-size: .8rem; }
@@ -365,7 +368,7 @@ body:has(.timer:not([hidden])) .toast { bottom: calc(160px + env(safe-area-inset
     auth = firebase.auth();
     const fs = firebase.firestore();
     fs.enablePersistence({ synchronizeTabs: true }).catch(() => {});
-    auth.getRedirectResult().catch(e => toast(authError(e)));
+    auth.getRedirectResult().catch(e => { if (e && e.code !== "auth/network-request-failed") toast(authError(e)); });
     let unsubs = [];
     auth.onAuthStateChanged(user => {
       unsubs.forEach(u => u()); unsubs = [];
@@ -388,17 +391,40 @@ body:has(.timer:not([hidden])) .toast { bottom: calc(160px + env(safe-area-inset
       const fail = e => { S.loadError = (e && e.code) || "error"; S.ready = true; render(); };
       S.loadError = null;
       // Without signal on a new phone the server never answers: after a while, show what is cached.
-      const slow = setTimeout(() => { if (!S.ready && S.user === user) { S.ready = true; render(); } }, 10000);
+      const slow = setTimeout(() => { if (!S.ready && S.user === user) { S.ready = true; render(); } }, navigator.onLine ? 10000 : 1500);
       unsubs.push(() => clearTimeout(slow));
+      S.pend = {};
       unsubs.push(planRef.onSnapshot({ includeMetadataChanges: true }, s => {
+        setPending("plan", s.metadata.hasPendingWrites);
         S.plan = s.exists ? s.data() : null;
         if (!s.exists && s.metadata.fromCache) { if (S.ready) render(); return; } // wait for the server before showing an empty account
         offerMigration(user.uid);
         S.ready = true; render();
       }, fail));
-      unsubs.push(logsRef.onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.logs = m; render(); }, fail));
-      unsubs.push(base.collection("data").doc("body").onSnapshot(s => { S.body = (s.exists && s.data().entries) || []; render(); }, fail));
+      unsubs.push(logsRef.onSnapshot({ includeMetadataChanges: true }, s => { setPending("logs", s.metadata.hasPendingWrites); const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.logs = m; render(); }, fail));
+      unsubs.push(base.collection("data").doc("body").onSnapshot({ includeMetadataChanges: true }, s => { setPending("body", s.metadata.hasPendingWrites); S.body = (s.exists && s.data().entries) || []; render(); }, fail));
     });
+  }
+
+  // ---------- offline ----------
+  // With an account, Firestore keeps a copy of everything on the phone: without signal the app reads and
+  // writes that copy, and the changes go up by themselves when the signal comes back (even if the app was
+  // closed in between). Here we only tell the person what is going on.
+  S.online = navigator.onLine; S.pend = {}; S.syncWait = false;
+  const pending = () => Object.values(S.pend).some(Boolean);
+  function setPending(k, v) {
+    const was = pending(); S.pend[k] = v;
+    if (v && !S.online) S.syncWait = true;
+    if (was && !pending() && S.syncWait) { S.syncWait = false; toast("Listo: tus cambios ya se subieron a tu cuenta"); }
+  }
+  const onNet = () => { S.online = navigator.onLine; if (!S.online && pending()) S.syncWait = true; if (S.ready) render(); };
+  window.addEventListener("online", onNet);
+  window.addEventListener("offline", onNet);
+  function netBanner() {
+    if (S.auth !== "in") return "";
+    if (!S.online) return `<p class="net off" role="status"><b>Sin conexión.</b> Seguí usando la app: lo que anotes queda guardado en el celular y se sube a tu cuenta cuando vuelva la señal.</p>`;
+    if (pending() && S.syncWait) return `<p class="net" role="status">Subiendo tus cambios…</p>`;
+    return "";
   }
 
   // A new account on a phone that already has notes from before the login: offer to bring them over.
@@ -417,6 +443,7 @@ body:has(.timer:not([hidden])) .toast { bottom: calc(160px + env(safe-area-inset
     return "No se pudo entrar (" + (c || "error") + ").";
   }
   async function signIn() {
+    if (!navigator.onLine) { toast("Para entrar con tu cuenta necesitás conexión."); return; }
     const p = new firebase.auth.GoogleAuthProvider();
     p.setCustomParameters({ prompt: "select_account" });
     try { await auth.signInWithPopup(p); }
@@ -1087,7 +1114,7 @@ body:has(.timer:not([hidden])) .toast { bottom: calc(160px + env(safe-area-inset
         <div class="brand"><h1>${esc(p.gym || "Mi gimnasio")}</h1>${p.coach ? `<p>Profe: ${esc(p.coach)}</p>` : ""}</div>
         <div class="top-right">${themeBtn()}<div class="today num">${["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}</div></div>
       </header>
-      ${S.local ? localBanner() : ""}
+      ${S.local ? localBanner() : ""}${netBanner()}
       <nav class="tabbar" aria-label="Secciones">
         <button data-act="tab" data-tab="train" aria-pressed="${S.tab === "train"}">Entrenar</button>
         <button data-act="tab" data-tab="progress" aria-pressed="${S.tab === "progress"}">Progreso</button>
@@ -1311,7 +1338,7 @@ body:has(.timer:not([hidden])) .toast { bottom: calc(160px + env(safe-area-inset
     else if (act === "restore") { const r = S.restore; S.restore = null; store.replaceAll(r.plan, r.logs || {}).then(() => (Array.isArray(r.body) ? store.saveBody(r.body) : null)).then(() => toast("Copia restaurada")); }
     else if (act === "cancel-restore") { S.restore = null; render(); }
     else if (act === "sign-in") signIn();
-    else if (act === "sign-out") auth.signOut();
+    else if (act === "sign-out") { if (pending()) toast("Hay cambios sin subir: esperá a tener señal para salir."); else auth.signOut(); }
     else if (act === "go-local") { if (S.auth === "out") { S.confirmLocal = true; render(); window.scrollTo(0, 0); } else { lsWrite("gym.mode", "local"); location.reload(); } }
     else if (act === "go-local-ok") { lsWrite("gym.mode", "local"); location.reload(); }
     else if (act === "go-account") { lsWrite("gym.mode", null); location.reload(); }
@@ -1400,7 +1427,7 @@ body:has(.timer:not([hidden])) .toast { bottom: calc(160px + env(safe-area-inset
     } catch (e) { toast("Ese archivo no es una copia de la Libreta de Gym."); }
   }
 
-  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
   document.addEventListener("submit", e => {
     e.preventDefault();
     const f = e.target;
