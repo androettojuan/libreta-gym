@@ -2,7 +2,7 @@
 // App files: network first (so updates arrive), cache as fallback.
 // Fonts, the PDF reader and the Firebase libraries: cache first.
 // Firebase sign-in and database traffic is never touched here.
-const CACHE = "libreta-gym-v15";
+const CACHE = "libreta-gym-v16";
 const SHELL = ["./", "index.html","manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -15,6 +15,15 @@ self.addEventListener("activate", e => {
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+// Tapping the "rest is over" notification brings the app back.
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+    for (const c of list) if ("focus" in c) return c.focus();
+    return self.clients.openWindow("./");
+  }));
 });
 
 self.addEventListener("fetch", e => {

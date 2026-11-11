@@ -228,6 +228,33 @@ button { cursor: pointer; }
 .install p { margin: 0; font-size: .88rem; color: var(--muted); }
 .install .links { grid-column: 1 / -1; margin-top: 6px; }
 
+/* Rest timer: floats above the tab bar, outside #app so re-renders leave it alone */
+.timer { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(72px + env(safe-area-inset-bottom, 0px)); z-index: 15; width: calc(100% - 24px); max-width: 616px; background: var(--ink); color: var(--bg); border-radius: 14px; overflow: hidden; box-shadow: 0 6px 24px rgb(0 0 0 / .25); }
+.wrap:not(:has(.tabbar)) ~ .timer { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+.timer-bar { height: 4px; background: color-mix(in srgb, var(--bg) 20%, transparent); }
+.timer-bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
+.timer-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px 14px; }
+.timer-info { flex: 1; min-width: 0; }
+.timer-info small { display: block; font-size: .75rem; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timer-info b { font-family: var(--font-display); font-size: 2rem; font-weight: 700; line-height: 1; }
+.timer-btns { display: flex; gap: 6px; }
+.timer-btns button { min-width: 44px; min-height: 44px; padding: 4px 8px; border: 1px solid color-mix(in srgb, var(--bg) 30%, transparent); border-radius: 10px; background: none; color: inherit; font-weight: 600; font-size: .9rem; }
+.timer-btns button.main { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.timer.done { background: var(--accent); color: var(--accent-ink); }
+.timer.done .timer-btns button { border-color: color-mix(in srgb, var(--accent-ink) 40%, transparent); }
+.timer.done .timer-btns button.main { background: var(--accent-ink); color: var(--accent); }
+body:has(.timer:not([hidden])) .wrap { padding-bottom: calc(176px + env(safe-area-inset-bottom, 0px)); }
+body:has(.timer:not([hidden])) .toast { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+@media (prefers-reduced-motion: no-preference) { .timer.done { animation: pulse 1s ease-in-out 3; } @keyframes pulse { 50% { transform: translateX(-50%) scale(1.03); } } }
+.rest-def { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.rest-def b { display: block; font-size: .95rem; }
+.rest-def small { display: block; color: var(--muted); font-size: .8rem; }
+.rest-def .stepper { grid-template-columns: 44px 72px 44px; height: 44px; flex: none; }
+.rest-def output { display: grid; place-items: center; border-block: 1px solid var(--line); background: var(--surface); font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; }
+.link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; }
+.prog .hist li.meas-row { grid-template-columns: 64px minmax(0,1fr) auto; }
+.meas-row b { font-family: var(--font-display); font-size: 1.05rem; }
+
 .toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-weight: 600; font-size: .9rem; max-width: calc(100% - 32px); z-index: 20; }
 @media (prefers-reduced-motion: no-preference) {
   .panel { animation: drop .16s ease-out; }
@@ -237,6 +264,7 @@ button { cursor: pointer; }
 </head>
 <body>
 <div class="wrap" id="app"><div class="loading" role="status"><svg viewBox="0 0 132 84" aria-hidden="true"><ellipse class="shadow" cx="66" cy="78" rx="46" ry="4"/><g class="lift"><rect class="bar" x="4" y="39" width="124" height="6" rx="3"/><rect class="plate" x="14" y="22" width="10" height="40" rx="3"/><rect class="plate" x="26" y="28" width="7" height="28" rx="2"/><rect class="plate" x="108" y="22" width="10" height="40" rx="3"/><rect class="plate" x="99" y="28" width="7" height="28" rx="2"/></g></svg><span class="sr">Cargando</span></div></div>
+<div class="timer" id="timer" role="timer" aria-live="off" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -250,7 +278,7 @@ button { cursor: pointer; }
   const S = {
     ready: false, plan: null, logs: {}, day: 0, open: null, editing: null,
     drafts: {}, preview: null, importing: false, local: false, armed: null,
-    tab: "train", body: [], bodyDraft: null, progOpen: null, builder: null,
+    tab: "train", body: [], bodyDraft: null, progOpen: null, builder: null, measDraft: null, measOpen: null,
   };
   try { S.day = parseInt(localStorage.getItem("gym.day"), 10) || 0; } catch (e) {}
   try { if (localStorage.getItem("gym.tab") === "progress") S.tab = "progress"; } catch (e) {}
@@ -341,7 +369,7 @@ button { cursor: pointer; }
     let unsubs = [];
     auth.onAuthStateChanged(user => {
       unsubs.forEach(u => u()); unsubs = [];
-      Object.assign(S, { user, plan: null, logs: {}, body: [], bodyDraft: null, open: null, editing: null, drafts: {}, preview: null, migrate: null, builder: null });
+      Object.assign(S, { user, plan: null, logs: {}, body: [], bodyDraft: null, measDraft: null, open: null, editing: null, drafts: {}, preview: null, migrate: null, builder: null });
       if (!user) { S.auth = "out"; S.ready = true; render(); return; }
       S.auth = "in"; S.ready = false; render();
       const base = fs.collection("users").doc(user.uid);
@@ -726,7 +754,8 @@ button { cursor: pointer; }
   const niceStep = r => { const p = 10 ** Math.floor(Math.log10(r)); const m = r / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; };
 
   // One series over real time: recessive grid, 2px line, ringed dots, last value labelled, tap/hover for each point.
-  function lineChart(pts, label) {
+  // pts: [{ d, w, t? }] — w is the plotted value (kg, reps or cm), t an optional tooltip text.
+  function lineChart(pts, label, unit = "kg") {
     const W = 340, H = 180, L = 36, R = 14, T = 22, B = 24;
     const xs = pts.map(p => dayMs(p.d)), ws = pts.map(p => p.w);
     let x0 = Math.min(...xs), x1 = Math.max(...xs);
@@ -734,7 +763,7 @@ button { cursor: pointer; }
     let lo = Math.min(...ws), hi = Math.max(...ws);
     const pad = (hi - lo) * 0.15 || Math.max(1, hi * 0.04);
     lo -= pad; hi += pad;
-    const step = niceStep((hi - lo) / 3);
+    const step = Math.max(niceStep((hi - lo) / 3), unit === "reps" ? 1 : 0);
     lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
     const X = v => L + ((v - x0) / (x1 - x0)) * (W - L - R), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
     const xy = pts.map((p, i) => [X(xs[i]), Y(p.w)]);
@@ -750,14 +779,14 @@ button { cursor: pointer; }
     if (pts.length > 4) ticks.splice(1, 0, Math.round((pts.length - 1) / 2));
     const xl = [...new Set(ticks)].map((i, k, a) => `<text x="${f(xy[i][0])}" y="${H - 6}" text-anchor="${a.length > 1 && k === 0 ? "start" : k === a.length - 1 && a.length > 1 ? "end" : "middle"}" class="ax">${fmtDate(pts[i].d)}</text>`).join("");
     const last = xy[xy.length - 1];
-    const data = xy.map((p, i) => [+f(p[0]), +f(p[1]), `${fmtDate(pts[i].d)} · ${fmtW(pts[i].w)} kg${pts[i].r ? " · " + pts[i].r + " reps" : ""}`]);
+    const data = xy.map((p, i) => [+f(p[0]), +f(p[1]), pts[i].t || `${fmtDate(pts[i].d)} · ${fmtW(pts[i].w)} ${unit}${pts[i].r ? " · " + pts[i].r + " reps" : ""}`]);
     return `<div class="chart" data-w="${W}" data-pts="${esc(JSON.stringify(data))}">
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}: de ${fmtW(ws[0])} a ${fmtW(ws[ws.length - 1])} kg">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}: de ${fmtW(ws[0])} a ${fmtW(ws[ws.length - 1])} ${unit}">
         ${grid}
         <path d="${area}" fill="var(--accent-soft)" opacity=".7"/>
         <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
         ${xy.map(p => `<circle cx="${f(p[0])}" cy="${f(p[1])}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>`).join("")}
-        <text x="${f(Math.min(last[0], W - R))}" y="${f(last[1] - 10)}" text-anchor="end" class="val">${fmtW(ws[ws.length - 1])} kg</text>
+        <text x="${f(Math.min(last[0], W - R))}" y="${f(last[1] - 10)}" text-anchor="end" class="val">${fmtW(ws[ws.length - 1])} ${unit}</text>
         ${xl}
         <line class="xh" x1="0" x2="0" y1="${T - 6}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>
         <circle class="xd" r="6" fill="var(--accent)" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>
@@ -783,11 +812,27 @@ button { cursor: pointer; }
     c.querySelector(".xh").setAttribute("visibility", "hidden"); c.querySelector(".xd").setAttribute("visibility", "hidden"); c.querySelector(".tip").hidden = true;
   }
 
+  // Body entries: { d, w?: kg, m?: { pecho, cintura, ... cm } } — weight and measures share the date.
   const bodySorted = () => (S.body || []).slice().sort((a, b) => a.d.localeCompare(b.d));
-  const deltaChip = (a, b) => { const d = b - a; return `<span class="delta num ${d > 0 ? "up" : ""}">${d > 0 ? "+" : ""}${fmtW(d)} kg</span>`; };
+  const bodyWeights = () => bodySorted().filter(e => e.w != null);
+  // neutral: no green for "more" (a bigger waist is not progress).
+  const deltaChip = (a, b, unit = "kg", neutral) => { const d = b - a; return `<span class="delta num ${d > 0 && !neutral ? "up" : ""}">${d > 0 ? "+" : ""}${fmtW(d)} ${unit}</span>`; };
+
+  // Exercises without weight: progress is the best set in reps. "3x12" → 12, "12, 10, 8" → 12.
+  const repsBest = r => {
+    const s = String(r || "").replace(/\d+\s*[x×]\s*(\d+)/gi, "$1");
+    const n = (s.match(/\d+/g) || []).map(Number).filter(v => v > 0 && v < 1000);
+    return n.length ? Math.max(...n) : null;
+  };
+  // What the progress of an exercise is measured in: kg if it was ever logged with weight, else reps.
+  function seriesOf(id) {
+    const en = entriesOf(id);
+    if (en.some(e => e.w != null)) return { unit: "kg", pts: en.filter(e => e.w != null) };
+    return { unit: "reps", pts: en.map(e => ({ d: e.d, w: repsBest(e.r), t: `${fmtDate(e.d)} · ${e.r} reps` })).filter(p => p.w != null) };
+  }
 
   function viewBody() {
-    const list = bodySorted(), last = list[list.length - 1];
+    const list = bodyWeights(), last = list[list.length - 1];
     if (!S.bodyDraft) S.bodyDraft = { w: last ? fmtW(last.w) : "", d: today() };
     const dr = S.bodyDraft, same = list.some(e => e.d === dr.d);
     return `<section class="prog"><div class="prog-head"><h2>Peso corporal</h2>
@@ -807,25 +852,56 @@ button { cursor: pointer; }
   function viewLifts() {
     const rows = [];
     for (const d of S.plan.days) for (const ex of d.exercises) {
-      const pts = entriesOf(ex.id).filter(e => e.w != null);
-      if (pts.length) rows.push({ ex, pts, day: d.title.replace(/^Entrenamiento\s*/i, "Día ") });
+      const { pts, unit } = seriesOf(ex.id);
+      if (pts.length) rows.push({ ex, pts, unit, day: d.title.replace(/^Entrenamiento\s*/i, "Día ") });
     }
-    if (!rows.length) return `<section class="prog"><h2>Tus levantamientos</h2><p class="obs">Cuando anotes pesos en tus ejercicios, acá vas a ver cómo van subiendo.</p></section>`;
-    return `<section class="prog"><h2>Tus levantamientos</h2><p class="obs">Tocá un ejercicio para ver su gráfico.</p>
-      <div class="lifts">${rows.map(({ ex, pts, day }) => {
+    if (!rows.length) return `<section class="prog"><h2>Tus ejercicios</h2><p class="obs">Cuando anotes pesos o repeticiones en tus ejercicios, acá vas a ver cómo van mejorando.</p></section>`;
+    return `<section class="prog"><h2>Tus ejercicios</h2><p class="obs">Tocá un ejercicio para ver su gráfico. Los que hacés sin peso se miden por tu mejor serie en repeticiones.</p>
+      <div class="lifts">${rows.map(({ ex, pts, unit, day }) => {
         const open = S.progOpen === ex.id, a = pts[0], b = pts[pts.length - 1];
         return `<article class="ex ${open ? "open" : ""}">
           <button class="ex-head lift" data-act="prog-toggle" data-id="${ex.id}" aria-expanded="${open}">
-            <span><span class="ex-name">${esc(ex.name)}</span><span class="ex-meta"><span>${esc(day)}</span><span>${pts.length} ${pts.length === 1 ? "registro" : "registros"}</span>${pts.length > 1 ? deltaChip(a.w, b.w) : ""}</span></span>
-            <span class="ex-last num"><b>${fmtW(b.w)}</b><span>kg</span></span>
+            <span><span class="ex-name">${esc(ex.name)}</span><span class="ex-meta"><span>${esc(day)}</span><span>${pts.length} ${pts.length === 1 ? "registro" : "registros"}</span>${pts.length > 1 ? deltaChip(a.w, b.w, unit) : ""}</span></span>
+            <span class="ex-last num"><b>${fmtW(b.w)}</b><span>${unit}</span></span>
           </button>
-          ${open ? `<div class="panel">${pts.length > 1 ? lineChart(pts, ex.name) : `<p class="obs">Con un registro más aparece el gráfico.</p>`}
-            ${pts.length > 1 ? `<p class="obs">Máximo: <b>${fmtW(Math.max(...pts.map(p => p.w)))} kg</b> · Primer registro: ${fmtW(a.w)} kg el ${fmtDate(a.d)}</p>` : ""}</div>` : ""}
+          ${open ? `<div class="panel">${pts.length > 1 ? lineChart(pts, ex.name, unit) : `<p class="obs">Con un registro más aparece el gráfico.</p>`}
+            ${pts.length > 1 ? `<p class="obs">${unit === "kg" ? "Máximo" : "Mejor serie"}: <b>${fmtW(Math.max(...pts.map(p => p.w)))} ${unit}</b> · Primer registro: ${fmtW(a.w)} ${unit} el ${fmtDate(a.d)}</p>` : ""}</div>` : ""}
         </article>`; }).join("")}</div></section>`;
   }
 
-  function viewTrend(entries) {
-    const pts = entries.filter(e => e.w != null);
+  const MEASURES = [["pecho", "Pecho"], ["cintura", "Cintura"], ["cadera", "Cadera"], ["brazo", "Brazo"], ["muslo", "Muslo"], ["pantorrilla", "Pantorrilla"]];
+  const measEntries = () => bodySorted().filter(e => e.m && Object.keys(e.m).length);
+  const measDraftFor = d => { const e = bodySorted().find(x => x.d === d); const o = { d }; for (const [k] of MEASURES) o[k] = e && e.m && e.m[k] != null ? fmtW(e.m[k]) : ""; return o; };
+
+  function viewMeasures() {
+    const list = measEntries();
+    if (!S.measDraft) S.measDraft = measDraftFor(today());
+    const dr = S.measDraft, same = list.some(e => e.d === dr.d);
+    const lastOfKey = k => { for (let i = list.length - 1; i >= 0; i--) if (list[i].m[k] != null) return list[i].m[k]; return null; };
+    const rows = MEASURES.map(([k, label]) => ({ k, label, pts: list.filter(e => e.m[k] != null).map(e => ({ d: e.d, w: e.m[k] })) })).filter(r => r.pts.length);
+    return `<section class="prog"><div class="prog-head"><h2>Medidas</h2><span class="obs">en centímetros</span></div>
+      ${rows.length ? `<div class="lifts">${rows.map(({ k, label, pts }) => {
+        const open = S.measOpen === k, a = pts[0], b = pts[pts.length - 1];
+        return `<article class="ex ${open ? "open" : ""}">
+          <button class="ex-head lift" data-act="meas-toggle" data-k="${k}" aria-expanded="${open}">
+            <span><span class="ex-name">${label}</span><span class="ex-meta"><span>${pts.length} ${pts.length === 1 ? "registro" : "registros"}</span>${pts.length > 1 ? deltaChip(a.w, b.w, "cm", true) + `<span>desde el ${fmtDate(a.d)}</span>` : ""}</span></span>
+            <span class="ex-last num"><b>${fmtW(b.w)}</b><span>cm</span></span>
+          </button>
+          ${open ? `<div class="panel">${pts.length > 1 ? lineChart(pts, label, "cm") : `<p class="obs">Con un registro más aparece el gráfico.</p>`}</div>` : ""}
+        </article>`; }).join("")}</div>` : `<p class="obs">Anotá tus medidas cada tanto (por ejemplo una vez por mes) para ver cómo cambian. Completá solo las que te midas.</p>`}
+      <form class="form" data-form="meas">
+        ${MEASURES.map(([k, label]) => { const l = lastOfKey(k); return `<div class="field"><label for="m-${k}">${label}</label><input id="m-${k}" data-mfield="${k}" class="num" inputmode="decimal" autocomplete="off" placeholder="${l != null ? fmtW(l) : "cm"}" value="${esc(dr[k])}"></div>`; }).join("")}
+        <div class="field full"><label for="m-d">Fecha</label><input id="m-d" data-mfield="d" type="date" value="${esc(dr.d)}" max="${today()}"></div>
+        <div class="actions"><button class="btn primary" type="submit">${same ? "Actualizar " + (dr.d === today() ? "hoy" : fmtDate(dr.d)) : "Guardar medidas"}</button></div>
+      </form>
+      ${list.length ? `<div class="hist"><ol>${list.slice().reverse().slice(0, 6).map(e => `<li class="meas-row"><span class="d num">${fmtDate(e.d)}</span>
+        <span class="rn">${MEASURES.filter(([k]) => e.m[k] != null).map(([k, label]) => `${label} <b class="num">${fmtW(e.m[k])}</b>`).join(" · ")}</span>
+        <span><button data-act="load-meas" data-d="${e.d}">Editar</button><button class="${S.armed === "meas|" + e.d ? "armed" : ""}" data-act="del-meas" data-d="${e.d}">${S.armed === "meas|" + e.d ? "¿Borrar?" : "Borrar"}</button></span></li>`).join("")}</ol></div>` : ""}
+    </section>`;
+  }
+
+  function viewTrend(id) {
+    const { pts, unit } = seriesOf(id);
     if (pts.length < 2) return "";
     const ws = pts.map(e => e.w), lo = Math.min(...ws), hi = Math.max(...ws), span = hi - lo || 1;
     const W = 200, H = 44, P = 4;
@@ -834,12 +910,12 @@ button { cursor: pointer; }
     const area = line + ` L${xy[xy.length - 1][0].toFixed(1)} ${H} L${xy[0][0].toFixed(1)} ${H} Z`;
     const end = xy[xy.length - 1], diff = ws[ws.length - 1] - ws[0];
     return `<div class="trend">
-      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Evolución del peso">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="${unit === "kg" ? "Evolución del peso" : "Evolución de las repeticiones"}">
         <path d="${area}" fill="var(--accent-soft)" stroke="none"/>
         <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
         <path d="M${end[0].toFixed(1)} ${end[1].toFixed(1)} h0" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
       </svg>
-      <span class="delta num ${diff > 0 ? "up" : ""}">${diff > 0 ? "+" : ""}${fmtW(diff)} kg<br><small style="font-weight:500;color:var(--muted)">desde ${fmtDate(pts[0].d)}</small></span>
+      <span class="delta num ${diff > 0 ? "up" : ""}">${diff > 0 ? "+" : ""}${fmtW(diff)} ${unit}<br><small style="font-weight:500;color:var(--muted)">desde ${fmtDate(pts[0].d)}</small></span>
     </div>`;
   }
 
@@ -860,12 +936,14 @@ button { cursor: pointer; }
     const sameDay = entries.some(e => e.d === dr.d);
     return `<div class="panel">
       <div class="links">
+        <button class="btn primary" data-act="rest" data-id="${id}" aria-label="Empezar descanso de ${fmtClock(restOf(ex))}">⏱ Descanso ${fmtClock(restOf(ex))}</button>
         ${ex.video ? `<a class="btn" href="${esc(ex.video)}" target="_blank" rel="noopener">▶ Ver video</a>` : ""}
         <button class="btn ghost" data-act="edit" data-id="${id}">Editar ejercicio</button>
       </div>
       ${ex.obs || ex.rest ? `<p class="obs">${esc([ex.rest && "Descanso: " + ex.rest, ex.obs].filter(Boolean).join(" · "))}</p>` : ""}
+      ${restCustom(id) ? `<p class="obs">Tu descanso para este ejercicio: <b>${fmtClock(restCustom(id))}</b> · <button class="link" data-act="rest-reset" data-id="${id}">Volver ${ex.rest && parseRest(ex.rest) ? "al del plan" : "al por defecto"} (${fmtClock(parseRest(ex.rest) || restDefault())})</button></p>` : ""}
       <form class="form" data-form="log" data-id="${id}">
-        <div class="field full"><label for="w-${id}">Peso (kg)</label>
+        <div class="field full"><label for="w-${id}">Peso (kg) · vacío si es sin peso</label>
           <div class="stepper"><button type="button" data-act="step" data-id="${id}" data-d="-2.5" aria-label="Restar 2,5 kg">−</button><input id="w-${id}" data-field="w" data-id="${id}" class="num" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(dr.w)}"><button type="button" data-act="step" data-id="${id}" data-d="2.5" aria-label="Sumar 2,5 kg">+</button></div>
         </div>
         <div class="field"><label for="r-${id}">Reps hechas</label><input id="r-${id}" data-field="r" data-id="${id}" autocomplete="off" placeholder="${esc(ex.reps || "ej. 10")}" value="${esc(dr.r)}"></div>
@@ -873,7 +951,7 @@ button { cursor: pointer; }
         <div class="field full"><label for="n-${id}">Nota</label><input id="n-${id}" data-field="n" data-id="${id}" autocomplete="off" placeholder="Ej: última serie al fallo" value="${esc(dr.n)}"></div>
         <div class="actions"><button class="btn primary" type="submit">${sameDay ? "Actualizar " + (dr.d === today() ? "hoy" : fmtDate(dr.d)) : "Guardar"}</button></div>
       </form>
-      <div class="hist"><h3>Historial</h3>${viewTrend(entries)}
+      <div class="hist"><h3>Historial</h3>${viewTrend(id)}
         <ol>${entries.length ? entries.slice().reverse().map(e => `<li>
           <span class="d num">${fmtDate(e.d)}</span>
           <span class="w num">${e.w != null ? fmtW(e.w) + " kg" : "—"}</span>
@@ -886,13 +964,14 @@ button { cursor: pointer; }
 
   function viewExercise(ex, i) {
     const last = lastOf(ex.id), lw = lastWeightOf(ex.id), done = last && last.d === today();
+    const lr = lw == null && last ? repsBest(last.r) : null;
     const open = S.open === ex.id;
     return `<article class="ex ${open ? "open" : ""} ${done ? "done" : ""}">
       <button class="ex-head" data-act="toggle" data-id="${ex.id}" aria-expanded="${open}">
         <span class="ex-idx num">${done ? "✓" : i + 1}</span>
         <span><span class="ex-name">${esc(ex.name)}</span>
           <span class="ex-meta">${ex.sets || ex.reps ? `<span class="chip sr-chip num">${ex.reps ? `${esc(ex.sets || "?")} × ${esc(ex.reps)}` : `${esc(ex.sets)} series`}</span>` : ""}${done ? `<span class="chip ok">Hecho hoy</span>` : ""}</span></span>
-        ${lw != null ? `<span class="ex-last num"><b>${fmtW(lw)}</b><span>kg</span><small>${relDate(last.d)}</small></span>` : `<span class="ex-last none">${last ? relDate(last.d) : "sin anotar"}</span>`}
+        ${lw != null ? `<span class="ex-last num"><b>${fmtW(lw)}</b><span>kg</span><small>${relDate(last.d)}</small></span>` : lr != null ? `<span class="ex-last num"><b>${lr}</b><span>reps</span><small>${relDate(last.d)}</small></span>` : `<span class="ex-last none">${last ? relDate(last.d) : "sin anotar"}</span>`}
       </button>
       ${open ? viewPanel(ex) : ""}
     </article>`;
@@ -984,6 +1063,7 @@ button { cursor: pointer; }
     const p = { ...rest, gym: (B.gym || "").trim(), coach: (B.coach || "").trim(), days,
       notes: notesText.split("\n").map(x => x.replace(/^\s*-\s*/, "").trim()).filter(Boolean) };
     if (mode !== "edit" || !p.loadedAt) p.loadedAt = today();
+    if (S.plan && S.plan.restDefault && p.restDefault == null) p.restDefault = S.plan.restDefault; // a new plan keeps the default rest
     assignIds(p);
     try {
       await store.savePlan(p);
@@ -1012,13 +1092,15 @@ button { cursor: pointer; }
         <button data-act="tab" data-tab="train" aria-pressed="${S.tab === "train"}">Entrenar</button>
         <button data-act="tab" data-tab="progress" aria-pressed="${S.tab === "progress"}">Progreso</button>
       </nav>
-      ${S.tab === "progress" ? `${viewBody()}${viewLifts()}${viewFooter(true)}` : `
+      ${S.tab === "progress" ? `${viewBody()}${viewMeasures()}${viewLifts()}${viewFooter(true)}` : `
       <nav class="days" aria-label="Entrenamientos">${p.days.map((dd, i) => { const l = dayLast(dd); return `<button data-act="day" data-i="${i}" aria-pressed="${i === di}" title="${esc(dd.title)}"><b>${esc(dayShort(dd.title))}</b><small>${l ? relDate(l) : dayFocus(dd.title) || dd.exercises.length + " ejercicios"}</small></button>`; }).join("")}</nav>
       ${p.notes && p.notes.length ? `<details class="notes"><summary>Indicaciones</summary><ul>${p.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></details>` : ""}
       <section class="list" aria-label="${esc(day.title)}">${day.exercises.map(viewExercise).join("")}</section>
       <section class="plan-box"><h2>Tu plan</h2>
         <p>${p.days.length} entrenamientos · ${p.days.reduce((n, x) => n + x.exercises.length, 0)} ejercicios${p.loadedAt ? ` · cargado el ${fmtDate(p.loadedAt)}` : ""}. Cuando el profe te dé uno nuevo, cargalo acá.</p>
-        ${S.preview ? "" : `<div class="links"><button class="btn" data-act="b-edit">Editar mi plan</button></div>`}
+        ${S.preview ? "" : `<div class="links"><button class="btn" data-act="b-edit">Editar mi plan</button></div>
+        <div class="rest-def"><span><b>Descanso por defecto</b><small>Para los ejercicios que no tienen descanso en el plan. Cada uno se ajusta con −15 / +15 en su temporizador.</small></span>
+          <div class="stepper"><button type="button" data-act="rest-def" data-d="-15" aria-label="Restar 15 segundos">−</button><output class="num" aria-live="polite">${fmtClock(restDefault())}</output><button type="button" data-act="rest-def" data-d="15" aria-label="Sumar 15 segundos">+</button></div></div>`}
         ${viewImport()}
       </section>
       ${viewBackup()}${viewFooter(true)}`}`;
@@ -1030,6 +1112,105 @@ button { cursor: pointer; }
     $("#app").innerHTML = (S.ready ? installBanner() : "") + view();
     if (aid) { const el = document.getElementById(aid); if (el) { el.focus({ preventScroll: true }); if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
   }
+
+  // ---------- rest timer ----------
+  // Which rest an exercise starts with: the time the person set for it with −15/+15 (this device),
+  // else the one in the plan ("90''", "1'30", "2 min", "60 seg", "1:30"), else the default for all (plan.restDefault, 90 s).
+  const fmtClock = s => `${Math.floor(s / 60)}:${pad(s % 60)}`;
+  function parseRest(s) {
+    s = String(s || "").toLowerCase().replace(/[’´`]/g, "'").replace(/[”″]|''/g, '"');
+    let m;
+    if ((m = s.match(/(\d+)\s*:\s*(\d{1,2})/))) return +m[1] * 60 + +m[2];
+    if ((m = s.match(/(\d+(?:[.,]5)?)\s*(?:'(?!')|min)[a-z]*\.?\s*(?:(\d+)\s*(?:"|s|seg)?)?/))) return Math.round(parseFloat(m[1].replace(",", ".")) * 60) + (m[2] ? +m[2] : 0);
+    if ((m = s.match(/(\d+)\s*(?:"|s\b|seg)/))) return +m[1];
+    if ((m = s.match(/(\d+(?:[.,]\d+)?)/))) { const v = parseFloat(m[1].replace(",", ".")); return v <= 10 ? Math.round(v * 60) : Math.round(v); }
+    return null;
+  }
+  const restDefault = () => (S.plan && S.plan.restDefault > 0 ? S.plan.restDefault : 90);
+  const restCustom = id => { const v = lsRead("gym.rest." + id); return v > 0 ? v : null; };
+  const restOf = ex => restCustom(ex.id) || parseRest(ex.rest) || restDefault();
+  function setRestDefault(d) {
+    const p = clone(S.plan); p.restDefault = Math.min(600, Math.max(15, restDefault() + d));
+    store.savePlan(p).then(() => { S.plan = { ...S.plan, restDefault: p.restDefault }; render(); }).catch(e => toast(saveError(e)));
+  }
+
+  const T = { id: null, name: "", total: 0, end: 0, left: 0, paused: false, done: false, tick: null, alarm: null };
+  let audio = null;
+  const secsLeft = () => (T.paused ? T.left : Math.max(0, Math.ceil((T.end - Date.now()) / 1000)));
+
+  function startRest(ex, secs) {
+    try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) { audio = null; }
+    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+    Object.assign(T, { id: ex.id, name: ex.name, total: secs, end: Date.now() + secs * 1000, paused: false, done: false });
+    schedule(); drawTimer();
+  }
+  function schedule() {
+    clearInterval(T.tick); clearTimeout(T.alarm);
+    if (T.paused || T.done || !T.id) return;
+    T.tick = setInterval(updateTimer, 250);
+    T.alarm = setTimeout(finishRest, Math.max(0, T.end - Date.now()));
+  }
+  function finishRest() {
+    if (T.done || !T.id) return;
+    T.done = true; schedule(); drawTimer();
+    try { navigator.vibrate && navigator.vibrate([400, 150, 400, 150, 700]); } catch (e) {}
+    beep();
+    if (document.visibilityState !== "visible" && "Notification" in window && Notification.permission === "granted" && navigator.serviceWorker) {
+      navigator.serviceWorker.getRegistration().then(r => r && r.showNotification("Terminó el descanso", { body: T.name, icon: "icon-192.png", tag: "rest", renotify: true, vibrate: [400, 150, 400] })).catch(() => {});
+    }
+  }
+  function beep() {
+    if (!audio) return;
+    try {
+      const t0 = audio.currentTime;
+      [0, 0.35, 0.7].forEach((dt, i) => {
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = "sine"; o.frequency.value = i === 2 ? 1320 : 880;
+        g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(0.4, t0 + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.28);
+        o.connect(g).connect(audio.destination); o.start(t0 + dt); o.stop(t0 + dt + 0.3);
+      });
+    } catch (e) {}
+  }
+  function timerAction(act, b) {
+    if (act === "t-stop") { Object.assign(T, { id: null, done: false }); schedule(); drawTimer(); return; }
+    if (act === "t-again") { const ex = findEx(T.id) || { id: T.id, name: T.name }; startRest(ex, T.total); return; }
+    if (act === "t-pause") {
+      if (T.paused) { T.end = Date.now() + T.left * 1000; T.paused = false; } else { T.left = secsLeft(); T.paused = true; }
+      schedule(); drawTimer(); return;
+    }
+    if (act === "t-add") {
+      const d = +b.dataset.d, left = secsLeft();
+      if (left + d <= 0) return;
+      T.total = Math.max(15, T.total + d);
+      if (T.paused) T.left += d; else T.end += d * 1000;
+      lsWrite("gym.rest." + T.id, T.total);
+      schedule(); updateTimer();
+      if (S.open === T.id) render(); // the "Descanso m:ss" button shows the new time
+    }
+  }
+  // Built only when the state changes; every tick touches just the numbers, so taps never land on a replaced button.
+  function drawTimer() {
+    const el = $("#timer");
+    if (!T.id) { el.hidden = true; el.innerHTML = ""; return; }
+    el.hidden = false; el.classList.toggle("done", T.done);
+    el.innerHTML = T.done
+      ? `<div class="timer-row"><div class="timer-info"><small>${esc(T.name)}</small><b>¡A la próxima serie!</b></div>
+          <div class="timer-btns"><button data-act="t-again">Otra vez</button><button class="main" data-act="t-stop">Listo</button></div></div>`
+      : `<div class="timer-bar"><i></i></div><div class="timer-row">
+          <div class="timer-info"><small>Descanso · ${esc(T.name)}</small><b class="num" data-t></b></div>
+          <div class="timer-btns"><button data-act="t-add" data-d="-15" aria-label="Restar 15 segundos">−15</button><button data-act="t-add" data-d="15" aria-label="Sumar 15 segundos">+15</button>
+            <button class="main" data-act="t-pause" aria-label="${T.paused ? "Seguir" : "Pausar"}">${T.paused ? "▶" : "❚❚"}</button><button data-act="t-stop" aria-label="Cerrar temporizador">✕</button></div></div>`;
+    updateTimer();
+  }
+  function updateTimer() {
+    if (!T.id || T.done) return;
+    const left = secsLeft(), el = $("#timer");
+    const t = el.querySelector("[data-t]"); if (t) t.textContent = fmtClock(left);
+    const bar = el.querySelector(".timer-bar i"); if (bar) bar.style.transform = `scaleX(${T.total ? left / T.total : 0})`;
+    if (left <= 0 && !T.paused) finishRest();
+  }
+  // Timers slow down while the phone is locked: on return, catch up at once.
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") updateTimer(); });
 
   // ---------- actions ----------
   const findEx = id => { for (const d of S.plan.days) for (const e of d.exercises) if (e.id === id) return e; return null; };
@@ -1045,7 +1226,7 @@ button { cursor: pointer; }
     try {
       await store.saveLog(id, { name: ex.name, entries });
       S.drafts[id] = { w: w == null ? "" : fmtW(w), r: "", n: "", d: today() };
-      toast(`Guardado: ${ex.name.slice(0, 28)}${w != null ? " · " + fmtW(w) + " kg" : ""}`);
+      toast(`Guardado: ${ex.name.slice(0, 28)}${w != null ? " · " + fmtW(w) + " kg" : dr.r.trim() ? " · " + dr.r.trim() + " reps" : ""}`);
       render();
     } catch (e) { toast(saveError(e)); }
   }
@@ -1073,6 +1254,7 @@ button { cursor: pointer; }
   async function savePlan() {
     const p = S.preview; if (!p) return;
     p.loadedAt = today();
+    if (S.plan && S.plan.restDefault) p.restDefault = S.plan.restDefault;
     try { await store.savePlan(p); S.preview = null; S.day = 0; S.open = null; toast("Plan guardado"); render(); window.scrollTo(0, 0); }
     catch (e) { toast(saveError(e)); }
   }
@@ -1082,7 +1264,9 @@ button { cursor: pointer; }
     for (const d of p.days) for (const e of d.exercises) if (e.id === id) {
       e.name = (f.get("name") || "").trim() || e.name;
       e.sets = (f.get("sets") || "").trim(); e.reps = (f.get("reps") || "").trim();
-      e.rest = (f.get("rest") || "").trim(); e.obs = (f.get("obs") || "").trim();
+      const rest = (f.get("rest") || "").trim();
+      if (rest !== e.rest) lsWrite("gym.rest." + id, null); // a new rest in the plan wins over the remembered one
+      e.rest = rest; e.obs = (f.get("obs") || "").trim();
       e.video = safeUrl((f.get("video") || "").trim());
     }
     try { await store.savePlan(p); S.editing = null; toast("Ejercicio actualizado"); render(); } catch (e) { toast(saveError(e)); }
@@ -1100,10 +1284,17 @@ button { cursor: pointer; }
       else builderAction(act, b);
       return;
     }
+    if (act.startsWith("t-")) { timerAction(act, b); return; }
     if (act === "toggle") { S.open = S.open === id ? null : id; S.editing = null; render(); }
     else if (act === "install") install();
     else if (act === "install-no") { lsWrite("gym.install.no", true); render(); }
     else if (act === "share") shareApp();
+    else if (act === "rest") { const ex = findEx(id); if (ex) startRest(ex, restOf(ex)); }
+    else if (act === "rest-def") setRestDefault(+b.dataset.d);
+    else if (act === "rest-reset") { lsWrite("gym.rest." + id, null); render(); }
+    else if (act === "meas-toggle") { S.measOpen = S.measOpen === b.dataset.k ? null : b.dataset.k; render(); }
+    else if (act === "load-meas") { S.measDraft = measDraftFor(b.dataset.d); render(); const f = document.getElementById("m-" + MEASURES[0][0]); if (f) f.closest("form").scrollIntoView({ block: "center", behavior: "smooth" }); }
+    else if (act === "del-meas") deleteMeasures(b.dataset.d);
     else if (act === "theme") { const t = isDark() ? "light" : "dark"; document.documentElement.setAttribute("data-theme", t); try { localStorage.setItem("gym.theme", t); } catch (er) {} render(); }
     else if (act === "tab") { S.tab = b.dataset.tab; try { localStorage.setItem("gym.tab", S.tab); } catch (er) {} render(); window.scrollTo({ top: 0 }); }
     else if (act === "prog-toggle") { S.progOpen = S.progOpen === id ? null : id; render(); }
@@ -1135,16 +1326,37 @@ button { cursor: pointer; }
     const dr = S.bodyDraft, w = parseW(dr.w);
     if (w == null || w <= 0) { toast("Anotá tu peso en kg."); return; }
     const d = dr.d || today();
-    const list = bodySorted().filter(e => e.d !== d);
-    list.push({ d, w }); list.sort((a, b) => a.d.localeCompare(b.d));
-    try { await store.saveBody(list); S.bodyDraft = { w: fmtW(w), d: today() }; toast(`Peso guardado: ${fmtW(w)} kg`); render(); }
+    try { await store.saveBody(bodyWith(d, { w })); S.bodyDraft = { w: fmtW(w), d: today() }; toast(`Peso guardado: ${fmtW(w)} kg`); render(); }
     catch (e) { toast(saveError(e)); }
+  }
+  // The body list with the entry of day d changed: fields set to null are removed, the entry goes if nothing is left.
+  function bodyWith(d, patch) {
+    const prev = bodySorted().find(e => e.d === d) || { d };
+    const next = { ...prev, ...patch };
+    for (const k of Object.keys(next)) if (next[k] == null) delete next[k];
+    const list = bodySorted().filter(e => e.d !== d);
+    if (next.w != null || next.m) list.push(next);
+    return list.sort((a, b) => a.d.localeCompare(b.d));
   }
   async function deleteBody(d) {
     const key = "body|" + d;
     if (S.armed !== key) { S.armed = key; render(); setTimeout(() => { if (S.armed === key) { S.armed = null; render(); } }, 3000); return; }
     S.armed = null;
-    try { await store.saveBody(bodySorted().filter(e => e.d !== d)); toast("Registro borrado"); } catch (e) { toast(saveError(e)); }
+    try { await store.saveBody(bodyWith(d, { w: null })); toast("Registro borrado"); } catch (e) { toast(saveError(e)); }
+  }
+  async function saveMeasures() {
+    const dr = S.measDraft, m = {};
+    for (const [k] of MEASURES) { const v = parseW(dr[k]); if (v != null && v > 0) m[k] = v; }
+    if (!Object.keys(m).length) { toast("Anotá al menos una medida en cm."); return; }
+    const d = dr.d || today();
+    try { await store.saveBody(bodyWith(d, { m })); S.measDraft = measDraftFor(today()); toast("Medidas guardadas"); render(); }
+    catch (e) { toast(saveError(e)); }
+  }
+  async function deleteMeasures(d) {
+    const key = "meas|" + d;
+    if (S.armed !== key) { S.armed = key; render(); setTimeout(() => { if (S.armed === key) { S.armed = null; render(); } }, 3000); return; }
+    S.armed = null;
+    try { await store.saveBody(bodyWith(d, { m: null })); S.measDraft = null; toast("Medidas borradas"); } catch (e) { toast(saveError(e)); }
   }
 
   document.addEventListener("input", e => {
@@ -1155,6 +1367,11 @@ button { cursor: pointer; }
       return;
     }
     if (t.dataset && t.dataset.bfield) { S.bodyDraft[t.dataset.bfield] = t.value; if (t.dataset.bfield === "d") render(); return; }
+    if (t.dataset && t.dataset.mfield) {
+      if (t.dataset.mfield === "d") { S.measDraft = measDraftFor(t.value || today()); render(); }
+      else S.measDraft[t.dataset.mfield] = t.value;
+      return;
+    }
     if (!t.dataset || !t.dataset.field) return;
     const ex = findEx(t.dataset.id); if (!ex) return;
     draftOf(ex)[t.dataset.field] = t.value;
@@ -1189,6 +1406,7 @@ button { cursor: pointer; }
     const f = e.target;
     if (f.dataset.form === "log") saveEntry(f.dataset.id);
     else if (f.dataset.form === "body") saveBody();
+    else if (f.dataset.form === "meas") saveMeasures();
     else if (f.dataset.form === "edit") saveEdit(f);
   });
 

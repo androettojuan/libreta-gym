@@ -66,7 +66,22 @@ Cada persona nueva arranca sin plan y carga el suyo desde el PDF o lo arma a man
 | `sw.js` | Service worker: deja la app disponible sin conexión. |
 | `firebase.json`, `.firebaserc` | Publicación en Firebase Hosting. |
 
+## Progreso
+
+- **Ejercicios con peso:** gráfico de los kg anotados.
+- **Ejercicios sin peso** (dominadas, fondos…): se deja el peso vacío y se anotan las reps; el progreso es la mejor serie (`3x12` → 12, `10, 9, 8` → 10).
+- **Peso corporal y medidas** (pecho, cintura, cadera, brazo, muslo, pantorrilla, en cm): cada una con su gráfico. Se anotan solo las que uno se mida.
+
+## Temporizador de descanso
+
+En cada ejercicio, **⏱ Descanso** arranca una cuenta regresiva. El tiempo sale, en este orden, de:
+
+1. El que uno ajustó para ese ejercicio con −15 / +15 (queda guardado en el celular; se puede volver al anterior desde el ejercicio, y se descarta si se cambia el descanso en el plan).
+2. El descanso del plan (entiende `90''`, `1'30`, `2 min`, `60 seg`, `1:30`).
+3. El **descanso por defecto** de "Tu plan" (90 s si no se cambió; se guarda con el plan y se sincroniza con la cuenta). Al terminar vibra, suena y, si la app quedó en segundo plano y se dio permiso, muestra una notificación.
+
 ## Estructura de datos
 
 - Plan: `{ gym, coach, notes[], days[{ title, exercises[{ id, name, sets, reps, rest, obs, video }] }], loadedAt }`
 - Pesos por ejercicio: `{ name, entries[{ d: "AAAA-MM-DD", w: kg | null, r, n }] }`
+- Cuerpo: `{ entries[{ d, w?: kg, m?: { pecho, cintura, cadera, brazo, muslo, pantorrilla } }] }` (cm)
